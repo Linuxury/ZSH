@@ -129,38 +129,17 @@
       "keyColor": "#ffe1a3",
       "format": "SWAP {1} / {2} ({3})",
     },
+    // Disks: detected from the hardware, one line per mounted local filesystem.
+    // The name is the filesystem label (mount point when there is none).
+    // Skipped by default: btrfs subvolumes, network shares, hidden volumes.
+    // hideFS autofs: an automount placeholder would list the same drive twice
+    // while it is mounted, so an automounted drive only shows while mounted.
     {
       "type": "disk",
       "key": "󰋊 →",
       "keyColor": "#ffe1a3",
-      "format": "NVMe {1} / {2} ({3}) - {9}",
-      "folders": "/",
-    },
-    {
-      "type": "disk",
-      "key": "󰋊 →",
-      "keyColor": "#ffe1a3",
-      "format": "Games {1} / {2} ({3}) - {9}",
-      "folders": "/mnt/Games",
-    },
-    {
-      "type": "disk",
-      "key": "󰋊 →",
-      "keyColor": "#ffe1a3",
-      // Automount: /mnt/Warehouse always has an autofs placeholder, plus the real
-      // ntfs3 mount on top while in use, so fastfetch would list it twice. Keep
-      // the always-present autofs entry (reading it wakes the drive, so sizes are
-      // real) and name the filesystem by hand, since {9} would say "autofs".
-      "format": "Warehouse {1} / {2} ({3}) - ntfs3",
-      "folders": "/mnt/Warehouse",
-      "hideFS": "ntfs3",
-    },
-    {
-      "type": "disk",
-      "key": "󰋊 →",
-      "keyColor": "#ffe1a3",
-      "format": "Media {1} / {2} ({3}) - {9}",
-      "folders": "/data",
+      "hideFS": "autofs",
+      "format": "{?name}{name}{?}{/name}{mountpoint}{/} {size-used} / {size-total} ({size-percentage}) - {filesystem}",
     },
     {
       "type": "command",
