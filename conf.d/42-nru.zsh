@@ -30,10 +30,11 @@ nru() {
   _NRU_GRP_PREV=
   _nru_group Flake "up to date"
   _nru_git_bar || { _nru_group_end; unfunction TRAPINT 2>/dev/null; return 1 }
-  # New shells load HM's copy of this file (last rebuild), not the repo. Re-source
-  # the repo copy silently so the remaining steps run the latest nru code
-  # (functions resolve at call time; only this function's step list stays old).
-  _NRU_QUIET=1 source "${ZSH_HOME:-$HOME/.zsh}/zshrc"
+  # New shells load the copy built into the last rebuild. If a checkout of this
+  # repo exists, re-source it silently so the remaining steps run its latest nru
+  # code (functions resolve at call time; only this function's step list stays
+  # old). Without a checkout the new code arrives with the next rebuild.
+  [[ -r ${ZSH_HOME:-$HOME/.zsh}/zshrc ]] && _NRU_QUIET=1 source "${ZSH_HOME:-$HOME/.zsh}/zshrc"
   _nru_inputs_bar
   _nru_group_end
 
