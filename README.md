@@ -7,19 +7,19 @@ and the `nru` update tool only makes sense there. The rest is plain zsh.
 
 | Path | What it holds |
 | --- | --- |
-| `zshrc` | Entry point. Sources `conf.d/*.zsh` in name order. |
+| `zshrc` | Entry point. Sources `conf.d/<folder>/*.zsh`. |
 | `init.nix` | The same files joined into one string, for Nix builds. |
-| `conf.d/00-env.zsh` | PATH wrappers, `EDITOR`, `NIXOS_CONFIG`, API key variables |
-| `conf.d/10-banner.zsh` | fastfetch on startup (random image from `~/Pictures/Fastfetch`) |
-| `conf.d/20-completion.zsh` | Completion styling |
-| `conf.d/30-` to `42-nru-*.zsh` | `nru`, the NixOS update tool, in 13 parts |
-| `conf.d/80-shortcuts.zsh` | Short commands, listed below |
-| `conf.d/91-` to `93-*.zsh` | `hytale`, `opencode`, `ctrl-check` |
-| `conf.d/99-local.zsh` | Loads `~/.env.local` if it exists (keys and secrets, not tracked) |
+| `conf.d/core/` | `00-env.zsh` (PATH wrappers, `EDITOR`, `NIXOS_CONFIG`, API key variables), `banner.zsh` (fastfetch on startup, random image from `~/Pictures/Fastfetch`), `completion.zsh` |
+| `conf.d/nru/` | `nru`, the NixOS update tool, in 13 files (`00-ui.zsh` holds the shared state) |
+| `conf.d/shortcuts/` | `shortcuts.zsh` (short commands, listed below), `hytale.zsh`, `opencode.zsh`, `ctrl-check.zsh` |
+| `conf.d/user/` | `local.zsh` loads `~/.env.local` if it exists (keys and secrets, not tracked) |
 | `starship/` | Starship prompt config and colour template |
 | `fastfetch/` | fastfetch config (the images live in the Assets repo) |
 
-Load order is the file name, so a new file only needs the right number.
+Folders load alphabetically: `core`, `nru`, `shortcuts`, `user`. Keep `user` last, so
+`~/.env.local` can override everything else. Inside a folder, files load by name.
+Functions are looked up when called, so the order only matters for the few lines that
+run at load time.
 
 ## Install
 
@@ -89,5 +89,6 @@ is not generic yet. Read it before you run it.
 
 ## Customize
 
-Edit or add files under `conf.d/`. New shell sessions pick them up; in a running
-session, `source ~/.zsh/zshrc`.
+Edit or add `.zsh` files in a folder under `conf.d/`. New shell sessions pick them up;
+in a running session, `source ~/.zsh/zshrc`. Files directly in `conf.d/` or nested
+deeper than one folder are ignored.

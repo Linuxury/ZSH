@@ -1,7 +1,12 @@
-# For Nix builds: joins conf.d/*.zsh in name order into one string
+# For Nix builds: joins conf.d/<folder>/*.zsh (folders by name, then files by
+# name, the same order zshrc loads them) into one string
 # (programs.zsh.initContent / programs.zsh.interactiveShellInit).
 #   import "${inputs.zsh}/init.nix" { inherit lib; }
 { lib }:
-let dir = ./conf.d; in
-lib.concatMapStrings (n: builtins.readFile (dir + "/${n}"))
-  (lib.attrNames (lib.filterAttrs (n: t: t == "regular" && lib.hasSuffix ".zsh" n) (builtins.readDir dir)))
+let
+  dir = ./conf.d;
+  names = d: t: lib.attrNames (lib.filterAttrs (_: v: v == t) (builtins.readDir d));
+  zshIn = d: map (n: d + "/${n}") (lib.filter (lib.hasSuffix ".zsh") (names d "regular"));
+in
+lib.concatMapStrings builtins.readFile
+  (lib.concatMap (f: zshIn (dir + "/${f}")) (names dir "directory"))
