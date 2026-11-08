@@ -86,7 +86,7 @@
       "type": "command",
       "key": "󰛖 →",
       "keyColor": "#FF6B6B",
-      "text": "font=$(grep '^font_family' ~/.config/kitty/kitty.conf | awk '{$1=\"\"; print $0}' | xargs); size=$(grep '^font_size' ~/.config/kitty/kitty.conf | awk '{print $2}'); echo \"${font} ${size}pt\"",
+      "text": "f=~/.config/kitty/kitty.conf; [ -r \"$f\" ] || exit 0; font=$(grep '^font_family' \"$f\" | awk '{$1=\"\"; print $0}' | xargs); size=$(grep '^font_size' \"$f\" | awk '{print $2}'); echo \"${font} ${size}pt\"",
     },
     "break",
 
