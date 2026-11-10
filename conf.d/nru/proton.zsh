@@ -1,11 +1,11 @@
 # _nru_update_proton_cachyos — checks GitHub for a new Proton-CachyOS release.
-# Only the lock writer bumps the inline fetchzip in modules/gaming/default.nix
+# Only the lock writer bumps the inline fetchzip in modules/gaming/gaming.nix
 # (committed with flake.lock); other hosts just report it and get it on pull.
 # nixpkgs has no CachyOS-Proton package under any name (checked), so this
 # tracker stays; GE-Proton comes from nixpkgs (pkgs.proton-ge-bin).
 # ---------------------------------------------------------------------------
 _nru_update_proton_cachyos() {
-  local gm="$NIXOS_CONFIG/modules/gaming/default.nix" name="Proton-Cachy" icon=$_NRU_GH
+  local gm="$NIXOS_CONFIG/modules/gaming/gaming.nix" name="Proton-Cachy" icon=$_NRU_GH
   local current latest cur_s new_s url tmp size total got xf pid hash i=1
 
   current=$(grep -oP 'protonCachyosTag = "\K[^"]+' "$gm")
@@ -58,16 +58,16 @@ _nru_update_proton_cachyos() {
 }
 
 # _nru_update_proton_ge — checks GitHub for a new GE-Proton release.
-# Only the lock writer bumps the inline fetchzip in modules/gaming/default.nix
+# Only the lock writer bumps the inline fetchzip in modules/gaming/gaming.nix
 # (committed with flake.lock); other hosts just report it and get it on pull.
 # GE-Proton comes from the GitHub tarball (nixpkgs' proton-ge-bin lags).
 # _nru_update_proton_wineland — checks GitHub for a new Proton Wineland release.
-# Only the lock writer bumps the inline fetchzip in modules/gaming/default.nix
+# Only the lock writer bumps the inline fetchzip in modules/gaming/gaming.nix
 # (committed with flake.lock); other hosts just report it and get it on pull.
 # Binaries are published only by the author's repo nanomatters/proton-salkim.
 # ---------------------------------------------------------------------------
 _nru_update_proton_wineland() {
-  local gm="$NIXOS_CONFIG/modules/gaming/default.nix" name="Proton-Wineland" icon=$_NRU_GH
+  local gm="$NIXOS_CONFIG/modules/gaming/gaming.nix" name="Proton-Wineland" icon=$_NRU_GH
   local current latest cur_s new_s url tmp size total got xf pid hash i=1
 
   current=$(grep -oP 'protonWinelandTag = "\K[^"]+' "$gm")
@@ -120,12 +120,12 @@ _nru_update_proton_wineland() {
 }
 
 # _nru_update_proton_ge — checks GitHub for a new GE-Proton release.
-# Only the lock writer bumps the inline fetchzip in modules/gaming/default.nix
+# Only the lock writer bumps the inline fetchzip in modules/gaming/gaming.nix
 # (committed with flake.lock); other hosts just report it and get it on pull.
 # GE-Proton comes from the GitHub tarball (nixpkgs' proton-ge-bin lags).
 # ---------------------------------------------------------------------------
 _nru_update_proton_ge() {
-  local gm="$NIXOS_CONFIG/modules/gaming/default.nix" name="Proton-GE" icon=$_NRU_GH
+  local gm="$NIXOS_CONFIG/modules/gaming/gaming.nix" name="Proton-GE" icon=$_NRU_GH
   local current latest cur_s new_s url tmp size total got xf pid hash i=1
 
   current=$(grep -oP 'protonGeTag = "\K[^"]+' "$gm")

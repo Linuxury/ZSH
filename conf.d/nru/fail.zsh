@@ -24,7 +24,7 @@ _nru_fail_summary() {
     pkg=${pkg%%-[0-9]*}   # "foo-1.2.3" → "foo"
     _NRU_FIX_PKG=$pkg; _NRU_FIX_ATTR=$attr; _NRU_FIX_HASH=$got
 
-    if [[ -n $pkg ]] && grep -qF "$spec" "$NIXOS_CONFIG/pkgs/hash-fixes/default.nix" 2>/dev/null; then
+    if [[ -n $pkg ]] && grep -qF "$spec" "$NIXOS_CONFIG/pkgs/hash-fixes.nix" 2>/dev/null; then
       _NRU_FAIL_KIND=hash-stale
       printf "  ✗  %s · our hash fix is now stale (nixpkgs fixed it upstream)\n" "$pkg"
     else
@@ -38,7 +38,7 @@ _nru_fail_summary() {
       printf "  ✗  %s · dependency hash mismatch (nixpkgs bug, not your config)\n" "${pkg:-$drv}"
       printf "       got %s\n" "$got"
       if [[ $_NRU_FAIL_KIND == hash ]]; then
-        printf "       fix: [F] adds an override to pkgs/hash-fixes/default.nix\n"
+        printf "       fix: [F] adds an override to pkgs/hash-fixes.nix\n"
       else
         printf "       fix: override the package's outputHash in an overlay\n"
       fi
@@ -79,16 +79,16 @@ _nru_fail_summary() {
 
 # ---------------------------------------------------------------------------
 # _nru_hash_fix — adds (kind hash) or removes (kind hash-stale) the entry for
-# _NRU_FIX_PKG in pkgs/hash-fixes/default.nix. One entry per line, file ends "}".
+# _NRU_FIX_PKG in pkgs/hash-fixes.nix. One entry per line, file ends "}".
 # ---------------------------------------------------------------------------
 _nru_hash_fix() {
-  local f="$NIXOS_CONFIG/pkgs/hash-fixes/default.nix"
+  local f="$NIXOS_CONFIG/pkgs/hash-fixes.nix"
   sed -i "/^  ${_NRU_FIX_PKG} = /d" "$f"
   if [[ $_NRU_FAIL_KIND == hash ]]; then
     sed -i "\$i\\  ${_NRU_FIX_PKG} = { attr = \"${_NRU_FIX_ATTR}\"; hash = \"${_NRU_FIX_HASH}\"; added = \"$(date +%F)\"; };" "$f"
-    printf "  ✎  added %s → pkgs/hash-fixes/default.nix · rebuilding…\n\n" "$_NRU_FIX_PKG"
+    printf "  ✎  added %s → pkgs/hash-fixes.nix · rebuilding…\n\n" "$_NRU_FIX_PKG"
   else
-    printf "  ✎  removed %s from pkgs/hash-fixes/default.nix · rebuilding…\n\n" "$_NRU_FIX_PKG"
+    printf "  ✎  removed %s from pkgs/hash-fixes.nix · rebuilding…\n\n" "$_NRU_FIX_PKG"
   fi
 }
 
