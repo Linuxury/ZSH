@@ -45,6 +45,19 @@ _nru_update_mailcraft() {
   if [[ $new == $cur ]]; then _nru_quiet "$icon" "$name" "$cur current"; else _nru_ok "$icon" "$name" "$cur → $new"; fi
 }
 
+# Bump the pinned Baalda release: server image tag + desktop .deb (lock writer only; scripts/baalda-bump does the work).
+_nru_update_baalda() {
+  local pin="$NIXOS_CONFIG/pkgs/baalda/baalda.json" name="Baalda" icon=$_NRU_NIX
+  local log="$_NRU_CACHE/baalda.log" cur new
+  cur=$(jq -r .version "$pin")
+  if [[ -n $_NRU_OFFLINE ]]; then _nru_offline "$icon" "$name"; return 0; fi
+  if ! _nru_spin "$icon" "$name" "checking" "$log" "$NIXOS_CONFIG/scripts/baalda-bump"; then
+    _nru_row "$icon" "$name" "⚠ bump failed · keeping $cur"; sed -E "s/^/       $_NRU_IND/" "$log" | tail -2; return 0
+  fi
+  new=$(jq -r .version "$pin")
+  if [[ $new == $cur ]]; then _nru_quiet "$icon" "$name" "$cur current"; else _nru_ok "$icon" "$name" "$cur → $new"; fi
+}
+
 # Bump Media-Server's pinned Plex (lock writer only; scripts/plex-bump does the work).
 _nru_update_plex() {
   local pin="$NIXOS_CONFIG/hosts/Media-Server/plex.json" name="Plex" icon=$_NRU_NIX
