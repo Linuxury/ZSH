@@ -44,7 +44,7 @@ nru() {
   command -v steam   &>/dev/null && _nru_update_proton_wineland
   command -v photocraft &>/dev/null && { _nru_update_craft_apps; _nru_craft_unpackaged }
   { _nru_is_lock_writer || command -v claude-desktop &>/dev/null } && _nru_update_claude_desktop
-  _nru_is_lock_writer && { _nru_update_plex; _nru_update_zennotes; _nru_update_mailcraft; _nru_update_baalda; _nru_update_vscodium_ext }
+  _nru_is_lock_writer && { _nru_update_plex; _nru_update_zennotes; _nru_update_mailcraft; _nru_update_vscodium_ext }
   _nru_group_end
 
   command -v flatpak &>/dev/null && { _nru_group Flatpak "up to date"; _nru_flatpak_bar; _nru_group_end }
