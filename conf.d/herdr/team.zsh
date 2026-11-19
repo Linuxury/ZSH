@@ -1,8 +1,8 @@
-# herdr-team — move the Lead + Workers Claude team from the herdr TUI to herdr-app.
-#   herdr-team save   in the TUI: remember each agent's Claude session id
-#   herdr-team app    with herdr-app open: rebuild the team there, resuming those sessions
-# Quit the TUI agents between the two (/exit): one Claude session can't run twice.
-# A worker with no saved id starts a fresh session.
+# herdr-team — run the Lead + Workers Claude team in herdr-app.
+#   herdr-team save   (TUI or app) remember each running member's current Claude session id
+#   herdr-team app    with herdr-app open: build the team there, resuming saved sessions
+# Close the old team before `app` (/exit): one Claude session can't run twice.
+# No saved id (or no team.json) = a fresh session for that member.
 
 typeset -gA _HT_LABEL=(
   lead     "Opus 5.5 Lead"
@@ -24,6 +24,8 @@ typeset -gA _HT_ROLE=(
 )
 _HT_FILE=$HOME/.config/herdr-app/team.json
 _HT_DIR=$HOME/nixos-config
+# Team rules, in every worker's system prompt so fresh sessions get them too.
+_HT_RULES="Team rules: you share one git checkout ($_HT_DIR, branch main) with the other workers; expect concurrent edits and re-read a file right before editing it. Coordinate directly with other workers via \`hc send <terminal id> \"<text>\"\`; the ids arrive in a roster message after startup. Make routine decisions yourself. Message the lead only with completed work, unresolved blockers, or important decisions needing input; no chatter or progress updates. Never commit, push, or run nixos-rebuild switch: the lead does that after review. Dry-build NixOS changes before reporting them done."
 
 # JSON argv for one member: claude [--resume id] --model … [--effort …] -n … [--append-system-prompt …]
 _ht_argv() {
@@ -35,7 +37,7 @@ _ht_argv() {
   [[ -n ${_HT_EFFORT[$k]} ]] && a+=(--effort "${_HT_EFFORT[$k]}")
   a+=(-n "${_HT_LABEL[$k]}")
   [[ -n ${_HT_ROLE[$k]} ]] && a+=(--append-system-prompt \
-    "You are ${_HT_LABEL[$k]}, a worker agent. Your mandate: ${_HT_ROLE[$k]} Stay strictly within this mandate.")
+    "You are ${_HT_LABEL[$k]}, a worker agent. Your mandate: ${_HT_ROLE[$k]} Stay strictly within this mandate. $_HT_RULES")
   jq -cn '$ARGS.positional' --args -- "${a[@]}"
 }
 
@@ -50,13 +52,22 @@ _ht_do() {
 herdr-team() {
   case $1 in
     save)
-      [[ ${HERDR_ENV:-} == 1 ]] || { print -u2 "herdr-team save: run it inside the herdr TUI"; return 1; }
+      # Claude Code keeps ~/.claude/sessions/<pid>.json per running session, with its
+      # current sessionId (changes on /clear) and -n name. Match members by that name.
+      local f k n; local -a kv
+      for f in ~/.claude/sessions/<->.json(N); do
+        kill -0 ${f:t:r} 2>/dev/null || continue
+        n=$(jq -r '.name // empty' $f)
+        for k in ${(k)_HT_LABEL}; do
+          [[ ${_HT_LABEL[$k]} == $n ]] && kv+=($k "$(jq -r .sessionId $f)")
+        done
+      done
+      (( $#kv )) || { print -u2 "herdr-team save: no running team members found"; return 1; }
       mkdir -p ${_HT_FILE:h}
-      herdr agent list | jq '[.result.agents[]
-        | {key: (if .name == "opus-5-5-lead" then "lead" else .name end), value: .agent_session.value}
-        | select(.key | IN("lead","perf","bugs","ui","simplify"))] | from_entries' >| $_HT_FILE || return 1
+      jq -n '$ARGS.positional as $a | [range(0; $a | length; 2) | {key: $a[.], value: $a[. + 1]}] | from_entries' \
+        --args -- "${kv[@]}" >| $_HT_FILE.tmp && mv $_HT_FILE.tmp $_HT_FILE || return 1
       jq -r 'to_entries[] | "  \(.key)\t\(.value)"' $_HT_FILE
-      print "Saved to $_HT_FILE. Now /exit each TUI agent, open herdr-app and run: herdr-team app"
+      print "Saved to $_HT_FILE. To rebuild: close the team (/exit), then: herdr-team app"
       ;;
     app)
       herdr-app ls 2>/dev/null | jq -e '.spaces[] | select(.name == "nixos team")' >/dev/null \
@@ -76,7 +87,7 @@ herdr-team() {
       o=$(_ht_do pane.split --direction down --pane $B --argv "$(_ht_argv simplify)") || return 1
       t[simplify]=$(jq -r .terminal <<<$o)
 
-      local roster="Team update: you now run in herdr-app, not the herdr TUI. \`herdr agent prompt\` no longer reaches anyone; message with \`hc send <id> \"<text>\"\` instead. Ids: lead=${t[lead]}, perf=${t[perf]}, bugs=${t[bugs]}, ui=${t[ui]}, simplify=${t[simplify]}. Everything else in the earlier briefing still applies. Do not reply to this message."
+      local roster="Team roster (herdr-app; message with \`hc send <id> \"<text>\"\`): lead=${t[lead]}, perf=${t[perf]}, bugs=${t[bugs]}, ui=${t[ui]}, simplify=${t[simplify]}. Team rules are in your system prompt. Do not reply to this message."
       local k
       for k in lead perf bugs ui simplify; do
         hc wait ${t[$k]} --timeout 60 >/dev/null 2>&1
