@@ -162,19 +162,21 @@
       "key": "󰚥 →",
       "keyColor": "#ffe1a3",
     },
-    "break",
+    // "break",
 
     // ── WEATHER ───────────────────────────────────────────────────────────────
-    {
-      "type": "custom",
-      "format": "\u001b[38;2;203;166;247mWEATHER\u001b[0m",
-    },
-    {
-      "type": "command",
-      "key": "󰖐 →",
-      "keyColor": "#cba6f7",
-      "text": "curl -s 'wttr.in/?format=%c+%C+%t+(feels+%f)+%l' 2>/dev/null | sed 's/+\\([0-9]\\)/\\1/g'",
-    },
+    // Disabled: synchronous curl to wttr.in added ~0.33s per shell start.
+    // Uncomment this block (and the "break" above) to bring it back.
+    // {
+      // "type": "custom",
+      // "format": "\u001b[38;2;203;166;247mWEATHER\u001b[0m",
+    // },
+    // {
+      // "type": "command",
+      // "key": "󰖐 →",
+      // "keyColor": "#cba6f7",
+      // "text": "curl -s 'wttr.in/?format=%c+%C+%t+(feels+%f)+%l' 2>/dev/null | sed 's/+\\([0-9]\\)/\\1/g'",
+    // },
     {
       "type": "colors",
       "paddingLeft": 3,
