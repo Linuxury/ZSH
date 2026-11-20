@@ -4,11 +4,16 @@
 # writer bumps pkgs/craft-apps/package.nix (version + hash from upstream's
 # SHA256SUMS.txt, always written together); other hosts report and pull it.
 # ---------------------------------------------------------------------------
+# Release tag = <prefix>v<ver>. Mirrors tagPrefix in package.nix; the artcraft
+# repo also has artcraft-windows-v* tags with no Linux build, so anchor on it.
+typeset -gA _NRU_CRAFT_PFX=(artcraft artcraft-)
 _nru_craft_latest() {   # "<app> <version>" per app, all in parallel
   local a
   for a; do
     { print -r -- "$a ${$(GIT_TERMINAL_PROMPT=0 timeout 15 git ls-remote --tags --refs \
-        "https://github.com/storytold/$a" 2>/dev/null | grep -oE 'v[0-9]+(\.[0-9]+)*$' | sort -V | tail -1)#v}" } &
+        "https://github.com/storytold/$a" 2>/dev/null \
+        | grep -oE "refs/tags/${_NRU_CRAFT_PFX[$a]}v[0-9]+(\.[0-9]+)*\$" | grep -oE '[0-9]+(\.[0-9]+)*$' \
+        | sort -V | tail -1)}" } &
   done
   wait
 }
@@ -16,8 +21,8 @@ _nru_craft_sums() {     # "<app> <version> <sha256 hex>" per app@version, all in
   local av
   for av; do
     { print -r -- "${av% *} ${av#* } $(curl -fsSL --max-time 15 \
-        "https://github.com/storytold/${av% *}/releases/download/v${av#* }/SHA256SUMS.txt" 2>/dev/null \
-        | grep -F "${av% *}-${av#* }-linux-x86_64.tar.gz" | cut -d' ' -f1)" } &
+        "https://github.com/storytold/${av% *}/releases/download/${_NRU_CRAFT_PFX[${av% *}]}v${av#* }/SHA256SUMS.txt" 2>/dev/null \
+        | awk -v f="${av% *}-${av#* }-linux-x86_64.tar.gz" '$NF == f || $NF == "*" f { print $1 }')" } &
   done
   wait
 }
@@ -27,7 +32,7 @@ _nru_update_craft_apps() {
   local -A cur new
   local -a moved rows
 
-  for a v in $(sed -nE 's/^\s+([a-z]+craft)\s+= \{ version = "([^"]+)".*/\1 \2/p' "$pkg"); do cur[$a]=$v; done
+  for a v in $(sed -nE 's/^\s+([a-z-]+)\s+= \{ version = "([^"]+)".*/\1 \2/p' "$pkg"); do cur[$a]=$v; done
   (( $#cur )) || return 0
   if [[ -n $_NRU_OFFLINE ]]; then _nru_offline "$icon" "$name"; return 0; fi
 
@@ -72,9 +77,8 @@ _nru_craft_unpackaged() {
   _nru_is_lock_writer && [[ -z $_NRU_OFFLINE ]] || return 0
   local -a have new
   have=($(sed -nE 's/^\s+([a-z]+craft)\s+= \{.*/\1/p' "$NIXOS_CONFIG/pkgs/craft-apps/package.nix"))
-  # artcraft = the engine itself, not a Craft app
   new=($(curl -fsSL --max-time 15 "https://api.github.com/orgs/storytold/repos?per_page=100" 2>/dev/null \
-    | jq -r '.[] | select(.archived | not) | .name | select(test("^[a-z]+craft$") and . != "artcraft")' 2>/dev/null))
+    | jq -r '.[] | select(.archived | not) | .name | select(test("^[a-z]+craft$"))' 2>/dev/null))
   new=(${new:|have})
   (( $#new )) || return 0
   _nru_row "$_NRU_GH" "Craft (new)" "🆕 ${(j:, :)new} · not packaged — add to pkgs/craft-apps/package.nix"
