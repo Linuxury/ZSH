@@ -166,7 +166,12 @@ herdr-team() {
         setsid -f herdr-app >/dev/null 2>&1
         local i; for i in {1..30}; do herdr-app status >/dev/null 2>&1 && break; sleep 1; done
       fi
-      herdr-team app
+      # Started from the launcher there is no terminal to read app's notes,
+      # so members it could not resume are reported as a desktop notification.
+      local out; out=$(herdr-team app 2>&1); print -r -- "$out"
+      local n=${#${(M)${(f)out}:#*open elsewhere*}}
+      (( n )) && notify-send -a "Herdr Team" "Herdr Team: $n not resumed" \
+        "Still open in another place (e.g. the herdr TUI). /exit them there, then open Herdr Team again."
       ;;
     *) print -u2 "usage: herdr-team app|launch"; return 1 ;;
   esac
