@@ -15,6 +15,7 @@
 #            -d / --delete-old removes all old generations, with no age limit.
 #   ngens  sudo nix-env --list-generations --profile /nix/var/nix/profiles/system
 #            list the system generations.
+alias ht='herdr-team launch full'   # lead + 4 idle workers (perf, bugs, ui, simplify)
 alias nrr='sudo nixos-rebuild switch --rollback'
 alias ngc='sudo nix-collect-garbage --delete-older-than 30d'
 alias ngens='sudo nix-env --list-generations --profile /nix/var/nix/profiles/system'

@@ -10,7 +10,7 @@ and the `nru` update tool only makes sense there. The rest is plain zsh.
 | `zshrc` | Entry point. Sources `conf.d/<folder>/*.zsh`. |
 | `init.nix` | The same files joined into one string, for Nix builds. |
 | `conf.d/core/` | `00-env.zsh` (PATH wrappers, `EDITOR`, `NIXOS_CONFIG`, API key variables), `banner.zsh` (fastfetch on startup, random image from `~/Pictures/Fastfetch`), `completion.zsh` |
-| `conf.d/herdr/` | `team.zsh`: the `herdr-team` command. `app` builds the lead + 2x2 workers team in herdr-app, or after a reboot resumes each member's Claude session in its pane (found by its `-n` name); `launch` opens herdr-app first (the "Herdr Team" launcher runs it). Needs claude, jq, herdr-app and hc. |
+| `conf.d/herdr/` | `team.zsh`: the `herdr-team` command. `space <name>` makes a plain Main + 2x2 Workers space (no Claude). `launch [full]` opens herdr-app and runs `start` (`full`: plus one idle worker of each type; alias `ht`), which builds the "desktop team" space with an Opus lead (fresh each time). The lead starts perf/bugs/ui/simplify workers with `worker`; workers `claim` files and `report` once; the lead reads `inbox`/`wait`, `workers`, `stop`. Roles come from the `herdr.team` label; state is in `~/.cache/herdr-team/`. Needs claude, jq, herdr-app and hc. |
 | `conf.d/nru/` | `nru`, the NixOS update tool, in 13 files (`00-ui.zsh` holds the shared state) |
 | `conf.d/shortcuts/` | `shortcuts.zsh` (short commands, listed below), `hytale.zsh`, `opencode.zsh`, `ctrl-check.zsh` |
 | `conf.d/user/` | `local.zsh` loads `~/.env.local` if it exists (keys and secrets, not tracked) |
