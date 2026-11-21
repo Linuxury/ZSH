@@ -1,40 +1,59 @@
-# ---------------------------------------------------------------------------
-# NixOS management functions
+# ===========================================================================
+# conf.d/nru/format.zsh — package-change table for nru
 #
-# Config lives at ~/nixos-config (symlinked from /etc/nixos).
-# The hostname is picked up automatically from the flake.
-# Abbreviations for one-liner commands are defined declaratively in home.nix
-# via programs.zsh.zsh-abbr.abbreviations — they expand inline before running.
-# ---------------------------------------------------------------------------
+# Defines _fmt_nvd, which turns `nvd diff` output into the "Packages" table
+# nru prints after a successful rebuild (conf.d/nru/run.zsh calls it and
+# also saves the result to ~/.cache/nru/last-packages.txt). Loaded with every
+# other conf.d/*/*.zsh file by zshrc; nru skips the table when nvd is not
+# installed, so removing nvd turns it off.
+# ===========================================================================
 
 # ---------------------------------------------------------------------------
-# _fmt_nvd — formats nvd diff output into a clean aligned package-changes table.
+# _fmt_nvd — format `nvd diff` output as an aligned package-changes table.
 #
-# Collects all package data into arrays first, then renders in one pass so
-# column widths can be computed from the actual data before the first row prints.
-# Outputs the complete formatted block (header + table + footer + divider).
-# Outputs nothing if no meaningful package changes are found.
-# Handles both nvd long-form ("Added packages:") and short-form ([A]/[U]/[R]) output.
+#   Input   nvd diff text on stdin; no arguments or flags.
+#   Output  on stdout: header line, Package / From / To table, store-path and
+#           disk-usage footer, closing divider. Nothing at all when there are
+#           no package rows and nothing was rebuilt.
+#   Example nvd diff /run/current-system ./result | _fmt_nvd
+#
+# Reads every line into arrays first and prints in a second pass, so the
+# column widths fit the longest name and version before the first row prints.
+# Accepts both nvd layouts: section headings ("Added packages:",
+# "Removed packages:", "Version changes:") and per-line markers ([A.], [R.],
+# [U*], [D.], [C.], …). nvd's marker letters: A added, R removed, U upgrade,
+# D downgrade, C changed; second character: * selected (in
+# environment.systemPackages), . dependency, + newly selected, - newly
+# unselected.
 # ---------------------------------------------------------------------------
 _fmt_nvd() {
   local section="" line
-  # All loop variables declared here — zsh prints "var=value" if `local` is
-  # re-run without assignment on an already-declared variable, so declaring
-  # inside the while loop leaks values to the output.
+  # Every loop variable is declared once, here. Re-running `local name` on a
+  # variable that already exists in this function prints "name=value" to
+  # stdout, which would end up inside the table.
   local pkg ver name old_v new_v rest old_vset new_vset
   local -a names=() old_vers=() new_vers=() actions=()
   local closure_old="" closure_new="" closure_added="" closure_removed="" closure_net="" closure_disk=""
 
+  # Pass 1: parse. IFS= and -r keep leading spaces and backslashes intact.
+  # Skips nvd's "<<< old" / ">>> new" path lines and blank lines.
   while IFS= read -r line; do
     [[ "$line" == '<<<'* || "$line" == '>>>'* ]] && continue
     [[ -z "${line// }" ]] && continue
 
-    # Long-form section headers
+    # Section headings (long layout): set which kind of row follows.
     if [[ "$line" == 'Added packages:'   ]]; then section="added";   continue; fi
     if [[ "$line" == 'Removed packages:' ]]; then section="removed"; continue; fi
     if [[ "$line" == 'Version changes:'* ]]; then section="version"; continue; fi
 
-    # Closure size line — extract all stats for the footer
+    # "Closure size: OLD -> NEW (A paths added, R paths removed, delta ±N,
+    # disk usage SIZE)." — pulls each number out with sed -E for the footer.
+    #   closure_old / closure_new          store paths before and after
+    #   closure_added / closure_removed    paths added and removed
+    #   closure_net                        net change in path count
+    #   closure_disk                       disk usage change; nvd leaves the
+    #                                      ", disk usage" part out when it
+    #                                      can't measure it
     if [[ "$line" == 'Closure size:'* ]]; then
       closure_old=$(    printf '%s' "$line" | sed -E 's/Closure size: ([0-9]+).*/\1/')
       closure_new=$(    printf '%s' "$line" | sed -E 's/[^0-9]*[0-9]+ -> ([0-9]+).*/\1/')
@@ -45,14 +64,23 @@ _fmt_nvd() {
       continue
     fi
 
-    # Short-form prefix — update section from marker
+    # Per-line marker (short layout): the first letter picks the row kind.
+    #   A → added    R → removed    U / D / C → version change
     case "$line" in
       '[A.'*|'[A*'*|'[A+'*|'[A-'*) section="added"   ;;
       '[R.'*|'[R*'*|'[R+'*|'[R-'*) section="removed" ;;
       '[C.'*|'[C*'*|'[C+'*|'[C-'*|'[D.'*|'[D*'*|'[D+'*|'[D-'*|'[U.'*|'[U*'*|'[U+'*|'[U-'*) section="version" ;;
     esac
 
+    # Turn the line into one table row: names[i], old_vers[i], new_vers[i],
+    # actions[i] (added | removed | updated) all share the same index i.
     case "$section" in
+      # Added / removed row: "[A.]  #12  name  version".
+      #   strips the marker, the "#NN" counter and any store-hash prefix
+      #   drops Home Manager and activation plumbing (source, home-manager-*,
+      #   hm_*, activation-script, unit-*): rebuilt on every switch, not news
+      #   keeps the first version only (", …" lists extra outputs)
+      #   the version shows under To for added rows, under From for removed
       added|removed)
         pkg=$(printf '%s' "$line" | sed -E 's/^\[[A-Z].\]  #[0-9]+  //; s/^[a-z0-9]{32,}-//')
         [[ -z "$pkg" ]] && continue
@@ -69,6 +97,9 @@ _fmt_nvd() {
           old_vers+=("$ver"); new_vers+=("-")
         fi
         ;;
+      # Version row: "[U.]  #3  name  1.2 -> 1.3". Strips the marker and the
+      # "#NN" counter, splits at " -> " into old_v and new_v, and skips any
+      # line without an arrow.
       version)
         pkg=$(printf '%s' "$line" | sed -E 's/^\[[A-Z][.*]\]  //')
         [[ -z "$pkg" ]] && continue
@@ -78,10 +109,13 @@ _fmt_nvd() {
         name="${pkg%% *}"
         rest="${pkg#"$name"}"; rest="${rest#"${rest%%[! ]*}"}"
         old_v="${rest%% -> *}"; new_v="${rest##* -> }"
-        # Strip multi-output noise (", 2.63.1-man") — keep only the first version token
+        # Keep only the first version: nvd lists extra outputs after a comma,
+        # e.g. "2.63.1, 2.63.1-man".
         old_v=$(printf '%s' "$old_v" | sed 's/, .*//')
         new_v=$(printf '%s' "$new_v" | sed 's/, .*//')
-        # Skip count-only closure changes (x3 → x2) — version itself didn't change
+        # " xN" is how many copies of that version are in the closure. If the
+        # versions match once the counts are removed (e.g. "1.0 x3 -> 1.0 x2"),
+        # only the count changed: skip the row. Otherwise drop the count.
         old_vset=$(printf '%s' "$old_v" | sed -E 's/ x[0-9]+//g')
         new_vset=$(printf '%s' "$new_v" | sed -E 's/ x[0-9]+//g')
         [[ "$old_vset" == "$new_vset" ]] && continue
@@ -93,7 +127,10 @@ _fmt_nvd() {
   done
 
   local n_total=${#names[@]}
-  # Same-version rebuilds (git-built flake inputs) have no rows — say so instead of nothing.
+  # No rows. If store paths were still added (packages rebuilt at the same
+  # version, e.g. flake inputs built from git), print a one-line note padded
+  # with ─ to the 58-column width; otherwise print nothing.
+  #   ${(l:n::─:)}  zsh left-pad flag: an empty value padded to n "─" chars
   if (( n_total == 0 )); then
     (( ${closure_added:-0} > 0 )) || return
     local t="─── Packages  ·  no version changes  ·  ${closure_added} rebuilt "
@@ -102,13 +139,16 @@ _fmt_nvd() {
     return
   fi
 
-  # Count by action type
+  # Pass 2: render. First count rows per action for the header.
   local n_updated=0 n_added=0 n_removed=0 a
   for a in "${actions[@]}"; do
     case "$a" in updated) (( n_updated++ ));; added) (( n_added++ ));; removed) (( n_removed++ ));; esac
   done
 
-  # Dynamic column widths — computed from actual data so the table is always tight
+  # Column widths from the data, so the table is never wider than needed.
+  #   col_name  longest package name (at least 7, "Package") + 2 spaces
+  #   col_from  longest old version (at least 4, "From") + 4 spaces
+  #   The To column is last, so it needs no width.
   local max_name=7 max_from=4 i  # floor = header label lengths ("Package", "From")
   for (( i=1; i<=n_total; i++ )); do
     [[ ${#names[$i]} -gt $max_name ]] && max_name=${#names[$i]}
@@ -116,7 +156,9 @@ _fmt_nvd() {
   done
   local col_name=$(( max_name + 2 )) col_from=$(( max_from + 4 ))
 
-  # Section header: "─── Packages  ·  N updated  ·  +64.8 MiB ───..."
+  # Header line: "─── Packages  ·  N updated  ·  N added  ·  N removed  ·
+  # <disk change> ───…". Parts with a zero count are left out; the ─ fill
+  # brings the line to 58 columns, the same width as the closing divider.
   local hparts="" j
   [[ $n_updated -gt 0 ]] && hparts="${n_updated} updated"
   [[ $n_added   -gt 0 ]] && hparts="${hparts:+${hparts}  ·  }${n_added} added"
@@ -126,18 +168,21 @@ _fmt_nvd() {
   local hfill="" hlen=$(( 58 - ${#htitle} ))
   for (( j=0; j<hlen; j++ )); do hfill="${hfill}─"; done
 
-  # Table separator and closing divider
+  # Rule under the column titles (spans both columns plus room for To) and
+  # the 58-column divider that closes the block.
   local sep="" close="" sep_len=$(( col_name + col_from + 22 ))
   for (( j=0; j<sep_len; j++ )); do sep="${sep}─"; done
   for (( j=0; j<58; j++ )); do close="${close}─"; done
 
-  # Render
+  # Print: header, column titles, rule, rows, footer, divider.
   echo ""
   printf '%s%s\n' "$htitle" "$hfill"
   echo ""
   printf "  %-${col_name}s  %-${col_from}s  %s\n" "Package" "From" "To"
   printf "  %s\n" "$sep"
-  # Notable packages first (kernel, browsers, graphics, init), then nvd's order.
+  # Row order: notable packages first (kernel, browsers, Mesa/NVIDIA graphics,
+  # systemd, Steam), then everything else in nvd's order. To promote another
+  # package, add its name or glob to the (a|b|…) pattern.
   local -a order rest
   for (( i=1; i<=n_total; i++ )); do
     if [[ ${names[$i]} == (linux|linux-*|firefox*|zen*|helium*|chromium*|mesa*|systemd|nvidia*|steam*) ]]; then
@@ -150,6 +195,7 @@ _fmt_nvd() {
     printf "  %-${col_name}s  %-${col_from}s  %s\n" "${names[$i]}" "${old_vers[$i]}" "${new_vers[$i]}"
   done
   echo ""
+  # Footer: store-path counts and disk usage, when nvd printed them.
   [[ -n "$closure_old" && -n "$closure_new" ]] && \
     printf "  Store paths: %s → %s  (%s new, %s removed, net %s)\n" \
       "$closure_old" "$closure_new" "$closure_added" "$closure_removed" "$closure_net"

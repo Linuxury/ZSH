@@ -1,21 +1,59 @@
-# ---------------------------------------------------------------------------
-# _nru_rebuild — runs the rebuild; on failure offers only the options that
-# can fix that kind of failure (Enter = the first, most likely fix). After a
-# success: verdict, push (lock writer only), run summary, disk + reboot checks.
-# Kept separate from nru so retries skip the git pull / input updates.
-# ---------------------------------------------------------------------------
+# ===========================================================================
+# conf.d/nru/rebuild.zsh — the rebuild step of nru
+#
+# Defines _nru_rebuild, called by nru (conf.d/nru/nru.zsh) after its update
+# steps and by nru's Ctrl+C retry menu. Loaded like every conf.d/*/*.zsh file
+# by zshrc; there is no switch. To drop it, nru must stop calling it first.
+# ===========================================================================
+
+# _nru_rebuild — switch this host to the flake in $NIXOS_CONFIG, then report.
+# A separate function so a retry repeats only the rebuild, not nru's git pull
+# and input updates.
+#   Arguments  none (host = $(hostname), flake = $NIXOS_CONFIG)
+#   Returns    0 after a switch; 1 when the user picks [q]uit in the failure
+#              menu. Exits the shell when the user answers yes to
+#              "close terminal?".
+#   Sets       _NRU_ON_PREV=1 when the build ran on the restored previous lock
+#   Example    _nru_rebuild
+# Steps: rebuild (with a failure menu and retry loop), verdict line, auto-update
+# markers, push of pinned files (lock writer only), run summary, /nix disk
+# check, firmware check, reboot check.
 _nru_rebuild() {
   local cfg=$NIXOS_CONFIG code choice moved key
   local -a keys opts
   _NRU_ON_PREV=""
 
+  # Rebuild + failure menu, repeated until a switch succeeds or the user quits.
+  #   _nixos_run          runs the command behind the progress filter, saves the
+  #                       log, and on failure sets _NRU_FAIL_KIND (via
+  #                       _nru_fail_summary in fail.zsh)
+  #   switch              build, activate and make it the boot default
+  #                       (alternatives: boot = only at next boot, test = activate
+  #                       without a boot entry, dry-build = only show what builds)
+  #   -L                  --print-build-logs; the filter reads these lines to
+  #                       name the package that is building
+  #   --no-link           don't leave a ./result symlink in the current directory
+  #   --flake "$cfg#host" build nixosConfigurations.<hostname> from the repo
+  # Exit codes: 0 = switched, 4 = switched but some units failed to start
+  # (both end the loop), 130 = Ctrl+C.
   while true; do
     _nixos_run sudo nixos-rebuild switch -L --no-link --flake "$cfg#$(hostname)"
     code=$?
     (( code == 0 || code == 4 )) && break
     (( code == 130 )) && _NRU_FAIL_KIND=interrupted
 
-    # [p]revious lock only makes sense if this run changed the inputs.
+    # [p]revious lock is offered only when this run changed a pinned file
+    # (uncommitted diff vs HEAD): flake.lock plus the pins nru's updaters bump
+    # (Proton tags, craft apps, Claude desktop, Plex, ZenNotes, VSCodium ext).
+    #
+    # Menu keys per failure kind (from _nru_fail_summary):
+    #   f  fix: hash = add an override to pkgs/hash-fixes.nix, hash-stale =
+    #      remove ours (_nru_hash_fix in fail.zsh)
+    #   p  previous lock: git restore the pinned files, rebuild on HEAD's pins
+    #   r  retry the same rebuild
+    #   l  log: open the saved failure log in less, then show the menu again
+    #   g  garbage-collect generations older than 30 days, then retry
+    #   q  quit (returns 1)
     moved=""
     git -C "$cfg" diff --quiet HEAD -- flake.lock modules/gaming/gaming.nix pkgs/craft-apps/package.nix pkgs/claude-desktop/package.nix hosts/Media-Server/plex.json modules/services/zennotes/zennotes.json modules/development/editors/vscodium/extensions.json 2>/dev/null || moved=p
     case $_NRU_FAIL_KIND in
@@ -29,6 +67,8 @@ _nru_rebuild() {
       interrupted) keys=(r q) ;;
       *)           keys=(r $moved l q) ;;
     esac
+    # Build the "key:label" list for _nru_menu. The first entry gets an
+    # uppercase key and label, which marks it as the default picked by Enter.
     opts=()
     for key in $keys; do
       case $key in
@@ -61,6 +101,12 @@ _nru_rebuild() {
   done
 
   # ── Verdict ────────────────────────────────────────────────────────────────
+  # One line: no changes / switched with N unit failures (exit 4) / success.
+  #   st                  key=value pairs from last-run.stats, written by the
+  #                       filter (fetched, dl_mib, built, failed_units)
+  #   _NIXOS_LAST_GEN     generation number, set by _nixos_run
+  #   _NIXOS_SWITCH_TIME  activation time, set by _nixos_run
+  #   _NIXOS_CHANGED      0 when the new system equals the running one
   local -A st
   local kv
   for kv in ${(f)"$(<"$_NRU_CACHE/last-run.stats")"}; do st[${kv%%=*}]=${kv#*=}; done 2>/dev/null
@@ -78,13 +124,22 @@ _nru_rebuild() {
     printf "  ✓  Rebuild successful%s\n" "$extra"
   fi
 
-  # The scheduled auto-update skips its 3am run if nru ran within 20h, and the
-  # session-start auto-update must not fire again right after nru.
+  # Auto-update markers (read by nixos-config modules/services/auto-update):
+  #   /etc/nixos-last-update-time   epoch of the last update; the scheduled run
+  #                                 skips if it is under 20h old (file is 0666)
+  #   /run/user/$UID/nixos-update-done  stops the session-start update from
+  #                                 running again this boot
   date +%s > /etc/nixos-last-update-time 2>/dev/null || true
   touch /run/user/$UID/nixos-update-done 2>/dev/null || true
 
   # ── Push shared state (lock writer only) ───────────────────────────────────
-  # Git output is hidden on success, shown in full on failure.
+  # Only the lock writer (_nru_is_lock_writer in 00-ui.zsh) commits and pushes
+  # the pinned files that changed; other hosts pull them on their next nru.
+  #   changed  pinned files with uncommitted changes (flake.lock, hash fixes,
+  #            updater pins)
+  #   names    short display names for the "pushed" line
+  # Commit message: "flake: update inputs (YYYY-MM-DD)". Git output is hidden
+  # on success and printed in full on failure.
   if _nru_is_lock_writer; then
     local git_out f
     local -a changed names
@@ -109,6 +164,8 @@ _nru_rebuild() {
   fi
 
   # ── Run summary ────────────────────────────────────────────────────────────
+  # Shown only when nru set _NRU_START: total time since nru started, data
+  # downloaded (MiB, or GiB from 1024 MiB) and number of derivations built.
   if [[ -n $_NRU_START ]]; then
     local t=$(( EPOCHSECONDS - _NRU_START )) dl=${st[dl_mib]:-0}
     if (( dl == 0 ));      then dl="nothing downloaded"
@@ -118,6 +175,11 @@ _nru_rebuild() {
   fi
 
   # ── Disk check ─────────────────────────────────────────────────────────────
+  # Above 90% use on /nix, offer garbage collection (Enter = GC now).
+  #   nix-collect-garbage --delete-older-than 30d  delete generations older than
+  #   30 days, then unreachable store paths. Alternatives: -d (all old
+  #   generations), --max-freed BYTES (stop after freeing that much),
+  #   --dry-run (only show what would go).
   local pcent avail
   read -r pcent avail <<< "$(df -h --output=pcent,avail /nix | tail -1)"
   if (( ${pcent%\%} > 90 )); then
@@ -126,14 +188,23 @@ _nru_rebuild() {
   fi
 
   # ── Firmware check ─────────────────────────────────────────────────────────
-  # Uses the metadata fwupd-refresh.timer already fetched; exit 0 = updates
-  # available, 2 = none. Notice only — installing is left to the user.
+  # Notice only; installing is left to the user (fwupdmgr update).
+  #   get-updates            list available updates for all devices
+  #   --no-unreported-check  skip the prompt about unreported update history
+  #   --no-metadata-check    use the metadata fwupd-refresh.timer already
+  #                          fetched; don't ask to refresh it
+  # Exit status: 0 = updates available, 2 = nothing to do.
   fwupdmgr get-updates --no-unreported-check --no-metadata-check </dev/null &>/dev/null \
     && printf "  ⚠  Firmware update available · please run: fwupdmgr update\n"
 
   # ── Reboot check ───────────────────────────────────────────────────────────
-  # Booted vs current system: a new kernel, initrd or systemd only fully takes
-  # effect after a reboot.
+  # Compares /run/booted-system with /run/current-system: a new kernel, initrd
+  # or systemd only fully takes effect after a reboot.
+  #   why   reasons, e.g. "kernel A → B", "initrd", "systemd A → B"
+  # If a reboot is needed: send an ntfy push to the nixos-updates topic on
+  # media-server (headers: Title, Priority = min|low|default|high|max, Tags =
+  # emoji short codes), then offer "reboot now" (Enter) or "later".
+  # If not: offer to close the terminal (Enter = yes).
   local -a why
   local b c
   if [[ "$(readlink -f /run/booted-system/kernel)" != "$(readlink -f /run/current-system/kernel)" ]]; then

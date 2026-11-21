@@ -1,26 +1,32 @@
-# ---------------------------------------------------------------------------
-# ctrl-check — detect connected controllers and report their status
+# ===========================================================================
+# conf.d/shortcuts/ctrl-check.zsh — list game controllers and whether you can read them
 #
-# Shows three layers that games (SDL2 / Hytale) depend on:
-#   js*     — legacy joystick nodes (SDL fallback)
-#   event*  — evdev nodes flagged as joystick/gamepad by udev
-#   hidraw* — raw HID nodes used by sc-controller for the Steam Controller
-#
-# For each device: name, vendor:product ID, and whether the current user
-# has access (uaccess tag or readable node). A ✓ means the game can see it;
-# an ✗ means a udev rule is missing or the user isn't in the right group.
-# ---------------------------------------------------------------------------
+# Usage: ctrl-check        (no arguments)
+# Prints three lists. Games (SDL2, Hytale) read the first two layers, and
+# sc-controller uses the third for the Steam Controller:
+#   js*      legacy joystick API nodes (SDL fallback)
+#   event*   evdev nodes whose udev properties include ID_INPUT_JOYSTICK,
+#            ID_INPUT_GAMEPAD or ID_INPUT_ACCELEROMETER set to 1
+#   hidraw*  raw HID nodes
+# Each device line shows: access, device path, vendor:product, name.
+#   ✓  readable by the current user (test: [[ -r PATH ]])
+#   ✗  not readable: the udev rule or group is missing
+# A readable device is usually granted by the udev "uaccess" tag, which gives
+# the logged-in seat user access.
+# To turn it off: rename the file so it no longer ends in .zsh.
+# ===========================================================================
 ctrl-check() {
   local bold='\e[1m' reset='\e[0m'
   local green='\e[32m' red='\e[31m' dim='\e[2m' cyan='\e[36m'
 
   _cc_access() {
-    # Returns ✓ (green) if readable, ✗ (red) if not
+    # _cc_access PATH: print ✓ (green) if PATH is readable, else ✗ (red)
     [[ -r "$1" ]] && echo "${green}✓${reset}" || echo "${red}✗${reset}"
   }
 
   _cc_udev_attr() {
-    # Extract a udevadm property by key, e.g. ID_VENDOR_ID
+    # _cc_udev_attr PATH KEY: print one udev property of PATH, e.g. ID_VENDOR_ID.
+    # Reads `udevadm info --query=property --name=PATH` (-q property, -n name).
     udevadm info --query=property --name="$1" 2>/dev/null \
       | grep "^${2}=" | cut -d= -f2-
   }
@@ -30,6 +36,8 @@ ctrl-check() {
   printf "${dim}  ─────────────────────────────────────────────────${reset}\n"
 
   # ── 1. Joystick nodes (js*) ────────────────────────────────────────────
+  # Name from ID_MODEL; vendor:product from ID_VENDOR_ID:ID_MODEL_ID.
+  # A missing value is shown as "unknown" (name) or "????" (IDs).
   printf "\n${cyan}${bold}  js nodes${reset}  ${dim}(legacy joystick API)${reset}\n"
   local found_js=0
   for dev in /dev/input/js*; do
@@ -49,6 +57,9 @@ ctrl-check() {
   [[ $found_js -eq 0 ]] && printf "  ${dim}  none${reset}\n"
 
   # ── 2. Evdev gamepad nodes (event* with joystick/gamepad flag) ─────────
+  # All udev properties of the node are read once, then grepped. A node is
+  # listed only if one of the three ID_INPUT_* flags is 1; the other event
+  # nodes (keyboard, mouse) are skipped.
   printf "\n${cyan}${bold}  evdev nodes${reset}  ${dim}(SDL2 / game input layer)${reset}\n"
   local found_ev=0
   for dev in /dev/input/event*; do
@@ -70,6 +81,8 @@ ctrl-check() {
   [[ $found_ev -eq 0 ]] && printf "  ${dim}  none${reset}\n"
 
   # ── 3. HID raw nodes (hidraw*) — sc-controller / Steam Controller ──────
+  # HID_ID is BUS:VENDOR:PRODUCT. Fields 2 and 3 become vendor and product.
+  # The && chain runs only when HID_ID is set.
   printf "\n${cyan}${bold}  hidraw nodes${reset}  ${dim}(sc-controller / HID mode)${reset}\n"
   local found_hid=0
   for dev in /dev/hidraw*; do
@@ -93,6 +106,6 @@ ctrl-check() {
   printf "\n${dim}  ─────────────────────────────────────────────────${reset}\n"
   printf "  ${dim}✓ = readable by $USER   ✗ = missing udev rule or group${reset}\n\n"
 
+  # Remove the two helpers so they do not stay defined in the shell.
   unfunction _cc_access _cc_udev_attr 2>/dev/null
 }
-

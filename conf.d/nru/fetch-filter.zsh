@@ -1,6 +1,12 @@
-# ---------------------------------------------------------------------------
-# _nix_fetch_filter — stdin filter used by _nixos_run.
+# ===========================================================================
+# conf.d/nru/fetch-filter.zsh — turns nixos-rebuild output into nru's display
 #
+# Defines _nix_fetch_filter, used only by _nixos_run (conf.d/nru/run.zsh).
+# Loaded like every conf.d/*/*.zsh file; there is no switch.
+# ===========================================================================
+
+# _nix_fetch_filter — awk filter between the rebuild output and the terminal.
+# What happens to each kind of line:
 #   - Build noise (agenix, store paths, systemd-run chatter): dropped
 #   - "these N derivations will be built" / "building …":    ⚒ progress
 #   - "these N paths will be fetched" / "copying path …":    ⬇ progress
@@ -11,8 +17,15 @@
 #     summary and saves the full log instead
 #   - Everything else (activation, warnings): passed through
 #
-# Args: STATE_FILE (read by _nru_ticker), CACHE_DIR (stats + unit list)
-# ---------------------------------------------------------------------------
+#   Arguments
+#     $1  STATE_FILE  current progress for _nru_ticker: "eval",
+#                     "fetch|done|total|label", "build|done|total|label",
+#                     or empty (= draw nothing)
+#     $2  CACHE_DIR   gets last-run.stats (fetched, dl_mib, built,
+#                     failed_units) and last-units.txt (units by action)
+#   Output   kept lines on stdout; progress bars and the units block on
+#            /dev/tty
+#   Example  nixos-rebuild switch -L ... 2>&1 | _nix_fetch_filter "$statef" "$_NRU_CACHE"
 _nix_fetch_filter() {
   awk -v statef="$1" -v cachedir="$2" '
   BEGIN { bw=20; ft=0; fd=0; bt=0; bd=0; kind=""; label=""; active=0; err=0
@@ -20,6 +33,10 @@ _nix_fetch_filter() {
           fetched=0; built=0; dl_mib=0
           n_stopped=0; n_restarted=0; n_reloaded=0; n_started=0; n_new=0; n_failed=0 }
 
+  # bw = bar width in cells; ft/fd = paths to fetch/fetched, bt/bd = derivations
+  # to build/built in the current round; kind + label = what the ticker shows;
+  # active = a round is running; err = an error line was seen.
+  # Write the current progress to the state file for the ticker.
   function state() {
     cur = (kind == "fetch") ? sprintf("fetch|%d|%d|%s", fd, ft, label) : sprintf("build|%d|%d|%s", bd, bt, label)
     printf "%s\n", cur > statef; close(statef)
@@ -39,12 +56,14 @@ _nix_fetch_filter() {
     print line; fflush()
     if (cur != "") { printf "%s\n", cur > statef; close(statef) }
   }
+  # bar(done, total): bw cells, filled in proportion (extra params are locals).
   function bar(d, t,   f, s, i) {
     f = int(d * bw / (t > 0 ? t : 1)); s = ""
     for (i = 0; i < f; i++) s = s "■"
     for (; i < bw; i++) s = s "□"
     return s
   }
+  # size(MiB) as "N MiB", or "N.N GiB" from 1024 MiB.
   function size(m) { return m >= 1024 ? sprintf("%.1f GiB", m / 1024) : sprintf("%.0f MiB", m) }
   # Print the final ⬇ / ⚒ lines once; later rounds (rare) start fresh bars.
   function finals() {
@@ -60,6 +79,8 @@ _nix_fetch_filter() {
   }
   # "these 98 derivations …" → 98; singular "this path …" → 1 (its first number is the size)
   function count(l) { return (l ~ /^these [0-9]+/ && match(l, /[0-9]+/)) ? substr(l, RSTART, RLENGTH) + 0 : 1 }
+  # Record a unit under an action once, keeping first-seen order.
+  # Actions: stopped, restarted, reloaded, started, new, failed.
   function add_unit(action, unit) {
     if (action == "stopped")   { if (!stopped_seen[unit])   { stopped_seen[unit]=1;   stopped_ord[++n_stopped]=unit   } }
     if (action == "restarted") { if (!restarted_seen[unit]) { restarted_seen[unit]=1; restarted_ord[++n_restarted]=unit } }
@@ -68,6 +89,7 @@ _nix_fetch_filter() {
     if (action == "new")       { if (!new_seen[unit])       { new_seen[unit]=1;       new_ord[++n_new]=unit           } }
     if (action == "failed")    { if (!failed_seen[unit])    { failed_seen[unit]=1;    failed_ord[++n_failed]=unit     } }
   }
+  # Write one action group to last-units.txt: the label, then indented units.
   function list_group(label, arr, n,   i) {
     if (n == 0) return
     printf "%s\n", label > unitsf
@@ -80,6 +102,8 @@ _nix_fetch_filter() {
   err                                                   { next }
   /^[[:space:]]*error:/                                 { finals(); err = 1; next }
 
+  # Dropped: agenix secret decryption, then known nixos-rebuild and
+  # switch-to-configuration chatter.
   /^\[agenix\]/ || /^decrypting /                      { next }
   # Eval-time warnings already get parsed from the log by nixos-log-rebuild
   # and shown in the "Flagged" block after the build.
@@ -171,6 +195,9 @@ _nix_fetch_filter() {
 
   { if (active) finals(); say($0) }
 
+  # Print the last bars, clear the ticker, write last-run.stats. If any unit
+  # changed: write last-units.txt and print the Units block (counts per
+  # action, then each failed unit).
   END {
     finals()
     printf "" > statef; close(statef)

@@ -1,12 +1,20 @@
-# ---------------------------------------------------------------------------
-# _nru_update_craft_apps — checks the storytold Craft apps for new releases.
-# Tags come from git ls-remote (no GitHub API rate limit). Only the lock
-# writer bumps pkgs/craft-apps/package.nix (version + hash from upstream's
-# SHA256SUMS.txt, always written together); other hosts report and pull it.
-# ---------------------------------------------------------------------------
-# Release tag = <prefix>v<ver>. Mirrors tagPrefix in package.nix; the artcraft
-# repo also has artcraft-windows-v* tags with no Linux build, so anchor on it.
+# ===========================================================================
+# conf.d/nru/craft.zsh — nru steps for the Craft apps (github.com/storytold)
+#
+# The apps are pinned in nixos-config pkgs/craft-apps/package.nix; each entry
+# starts <app> = { version = "..."; hash = "..."; on one line (the sed edits
+# here rely on that). nru runs these steps only when photocraft is installed
+# (conf.d/nru/nru.zsh). Loaded like every conf.d/*/*.zsh file; no switch.
+# ===========================================================================
+
+# Tag prefix per app: release tag = <prefix>v<version>, default prefix "".
+# Must match tagPrefix in package.nix. artcraft needs "artcraft-" because its
+# repo also has artcraft-windows-v* tags with no Linux build.
 typeset -gA _NRU_CRAFT_PFX=(artcraft artcraft-)
+# _nru_craft_latest APP... — newest release version of each app, one
+# "<app> <version>" line per app (empty version when unreachable). Reads tags
+# with git ls-remote, which has no GitHub API rate limit; 15s timeout per app.
+#   Example  _nru_craft_latest photocraft artcraft
 _nru_craft_latest() {   # "<app> <version>" per app, all in parallel
   local a
   for a; do
@@ -17,6 +25,10 @@ _nru_craft_latest() {   # "<app> <version>" per app, all in parallel
   done
   wait
 }
+# _nru_craft_sums "APP VERSION"... — SHA-256 of each app's
+# <app>-<version>-linux-x86_64.tar.gz from the release's SHA256SUMS.txt, one
+# "<app> <version> <hex>" line per pair (empty hex when missing).
+#   Example  _nru_craft_sums "photocraft 1.2.0" "artcraft 0.9.1"
 _nru_craft_sums() {     # "<app> <version> <sha256 hex>" per app@version, all in parallel
   local av
   for av; do
@@ -26,6 +38,12 @@ _nru_craft_sums() {     # "<app> <version> <sha256 hex>" per app@version, all in
   done
   wait
 }
+# _nru_update_craft_apps — check every app in package.nix for a newer release.
+# Never downgrades. Only the lock writer (_nru_is_lock_writer) writes the new
+# version and SRI hash; other hosts show how many are available and get them
+# on their next pull. Prints one status row, plus one tree line per bumped app.
+#   Arguments  none; returns 0
+#   Example    _nru_update_craft_apps
 _nru_update_craft_apps() {
   local pkg="$NIXOS_CONFIG/pkgs/craft-apps/package.nix" name="Craft Apps" icon=$_NRU_GH
   local log="$_NRU_CACHE/craft.log" a v h sri w=0
@@ -70,9 +88,13 @@ _nru_update_craft_apps() {
   _nru_tree "${rows[@]}"
 }
 
-# _nru_craft_unpackaged — reports storytold *craft repos missing from
-# package.nix (a new app needs a suite + a build check, so never auto-added).
-# Lock writer only: one GitHub API call, shared 60/h budget. Silent on failure.
+# _nru_craft_unpackaged — list storytold repos named <word>craft (not
+# archived) that package.nix lacks. Report only: adding an app needs a package
+# entry and a build check, so it is never automatic. Lock writer only, skipped
+# offline; one GitHub API call (unauthenticated limit: 60 requests per hour).
+# Silent when the call fails.
+#   Arguments  none; returns 0
+#   Example    _nru_craft_unpackaged
 _nru_craft_unpackaged() {
   _nru_is_lock_writer && [[ -z $_NRU_OFFLINE ]] || return 0
   local -a have new

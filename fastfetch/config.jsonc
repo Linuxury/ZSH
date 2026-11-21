@@ -1,9 +1,26 @@
+// ===========================================================================
+// fastfetch/config.jsonc — the system summary printed when a shell opens
+//
+// Linked to ~/.config/fastfetch for every desktop user (Home Manager
+// home.file) and to /etc/fastfetch for servers (server-shell.nix).
+// conf.d/core/banner.zsh runs fastfetch with a random image from
+// ~/Pictures/Fastfetch/; to turn the banner off, remove that call. To try
+// changes: fastfetch -c <path to this file>.
+// Option reference: the $schema below, or https://github.com/fastfetch-cli/fastfetch/wiki
+// ===========================================================================
 {
+  // JSON schema: lets editors validate and autocomplete this file.
   "$schema": "https://github.com/fastfetch-cli/fastfetch/raw/dev/doc/json_schema.json",
   "logo": {
-    // kitty-direct uses the kitty graphics protocol.
-    // Source passed at runtime via --logo (random pick from ~/Pictures/Fastfetch/).
-    // Image spec: 350×598px (35 cols × 26 rows). Cell size: 10×23px.
+    // Image logo. The image file is passed at runtime with --logo (banner.zsh
+    // picks one at random from ~/Pictures/Fastfetch/; over SSH it uses the
+    // built-in text logo instead).
+    //   type     kitty-direct: the terminal reads the image file itself (kitty
+    //            graphics protocol; local terminals only). Others: kitty, sixel,
+    //            iterm, chafa (text art), builtin, small, file, none
+    //   width / height  logo size in terminal cells; images are drawn at
+    //            350×598 px to fill 35×26 cells of 10×23 px
+    //   padding  empty cells above (top), left and right of the logo
     "type": "kitty-direct",
     "width": 35,
     "height": 26,
@@ -13,45 +30,81 @@
       "right": 3,
     },
   },
+  // Global display settings.
+  //   separator  text between a key (icon) and its value; default ": "
+  //   Also available: showErrors (print modules that fail; default false, so a
+  //   missing battery or Bluetooth adapter just hides that line), color, key.width.
   "display": {
     "separator": "  ",
   },
+  // Lines to print, top to bottom. Every module takes:
+  //   type      which module (cpu, gpu, disk, command, custom, …)
+  //   key       label in front of the value; here a Nerd Font icon and an arrow
+  //   keyColor  colour of that label (hex or a colour name); one colour per section
+  //   format    the value's layout, with {placeholders} the module provides
+  // "break" prints an empty line. Other modules that could be added: host,
+  // uptime, packages, shell, terminal, wm, de, localip, wifi, weather, and more
+  // (full list: fastfetch --list-modules).
   "modules": [
     // ── SYSTEM ────────────────────────────────────────────────────────────────
+    // Section title: a custom module prints its format text as is; the
+    // \u001b[38;2;R;G;Bm … \u001b[0m around it is a 24-bit terminal colour.
+    // Same pattern for DESKTOP and HARDWARE below.
     {
       "type": "custom",
       "format": "\u001b[38;2;79;154;208mSYSTEM\u001b[0m",
     },
+    // Distribution name from /etc/os-release (PRETTY_NAME).
+    //   format  alternatives: {name} {version}, {codename}, {id}
     {
       "type": "os",
       "key": "󱄅 →",
       "keyColor": "#4f9ad0",
       "format": "{pretty-name}",
     },
+    // Kernel and Mesa versions: "Linux 6.x · Mesa 25.x".
+    // command modules run text with /bin/sh -c and print its stdout. Options:
+    //   shell / param  program and flag used to run text (default /bin/sh -c)
+    //   parallel       run alongside the other commands (default true)
+    //   useOutput      stdout (default), stderr or both
+    //   splitLines     one output line per row (default false)
+    // Mesa's version is read from the /run/opengl-driver store path's
+    // references. Built-in alternative for the kernel: the kernel module.
     {
       "type": "command",
       "key": "󰌽 →",
       "keyColor": "#4f9ad0",
       "text": "kernel=$(uname -r); mesa=$(nix-store -q --references /run/opengl-driver 2>/dev/null | grep -oP 'mesa-[0-9.]+' | head -1 | cut -d- -f2); echo \"Linux ${kernel} · Mesa ${mesa}\"",
     },
+    // Package counts: "N nix · N flatpak". nix = unique store paths in the
+    // system profile plus the current Home Manager generation; flatpak = lines
+    // of `flatpak list`. Built-in alternative: the packages module (counts
+    // profile packages rather than every store path).
     {
       "type": "command",
       "key": "󰏖 →",
       "keyColor": "#4f9ad0",
       "text": "hm=$(readlink -f $HOME/.local/state/home-manager/gcroots/current-home 2>/dev/null); nix=$(/run/current-system/sw/bin/nix-store -q --requisites /nix/var/nix/profiles/system ${hm:+$hm} 2>/dev/null | sort -u | wc -l); fp=$(flatpak list 2>/dev/null | wc -l); echo \"${nix} nix · ${fp} flatpak\"",
     },
+    // Running process count.
+    //   format  {} (or {1}) is the count; {2} is the thread count
     {
       "type": "processes",
       "key": "󰙰 →",
       "keyColor": "#4f9ad0",
       "format": "{} processes running",
     },
+    // Install age and uptime: "Day N · H hrs, M min" ("Nyr Nd" after a
+    // year). Install date = creation time of /etc/machine-id, or its
+    // modification time when the filesystem has no creation time. Built-in
+    // alternative for uptime: the uptime module.
     {
       "type": "command",
       "key": "󰅐 →",
       "keyColor": "#4f9ad0",
       "text": "install=$(stat -c '%W' /etc/machine-id 2>/dev/null); [ \"${install:-0}\" = \"0\" ] && install=$(stat -c '%Y' /etc/machine-id 2>/dev/null); days=$(( ($(date +%s) - install) / 86400 )); if [ $days -ge 365 ]; then yrs=$(( days / 365 )); rem=$(( days % 365 )); age=\"${yrs}yr ${rem}d\"; else age=\"Day ${days}\"; fi; up=$(awk '{s=$1; h=int(s/3600); m=int((s%3600)/60); if(h>0) printf \"%d hr%s, %d min\", h,(h==1?\"\":\"s\"),m; else printf \"%d min\", m}' /proc/uptime); echo \"${age} · ${up}\"",
     },
+    // Empty line between sections.
     "break",
 
     // ── DESKTOP ───────────────────────────────────────────────────────────────
@@ -59,29 +112,50 @@
       "type": "custom",
       "format": "\u001b[38;2;255;107;107mDESKTOP\u001b[0m",
     },
+    // Desktop, compositor and session: "COSMIC 1.x · cosmic-comp 1.x · Wayland".
+    // Finds the process that owns the Wayland socket in /run/user/<uid>
+    // (or, without Wayland, a running X11 window manager from a fixed list),
+    // strips NixOS wrapper names (.foo-wrapped), and takes the version from
+    // `hyprctl version` for Hyprland or from the program's /nix/store path.
+    // Maps cosmic-comp → COSMIC, kwin → KDE Plasma, gnome-shell → GNOME,
+    // umbriel → Umbriel plus the running Noctalia shell's version.
+    // Session is Wayland when any Wayland socket exists, X11 otherwise.
+    // Built-in alternatives: the de and wm modules.
     {
       "type": "command",
       "key": "󰖲 →",
       "keyColor": "#FF6B6B",
       "text": "de=\"\"; wm=\"\"; comm=\"\"; exe=\"\"; socket=$(ls /run/user/$(id -u)/wayland-* 2>/dev/null | grep -v lock | head -1); if [ -n \"$socket\" ]; then pid=$(ss -xlp 2>/dev/null | grep \"${socket##*/}\" | grep -oP 'pid=\\K[0-9]+' | head -1); exe=$(readlink /proc/$pid/exe 2>/dev/null); comm=$(basename \"$exe\" 2>/dev/null | sed 's/^\\.//; s/-wrapped$//; s/_wrapper$//'); [ -z \"$comm\" ] && comm=$(cat /proc/$pid/comm 2>/dev/null); fi; if [ -z \"$comm\" ]; then for c in kwin_x11 gnome-shell xfwm4 openbox i3 bspwm mutter; do wm_pid=$(pgrep -u $(id -u) \"$c\" 2>/dev/null | head -1); [ -n \"$wm_pid\" ] && exe=$(cat /proc/$wm_pid/cmdline 2>/dev/null | tr '\\0' '\\n' | head -1) && comm=\"$c\" && break; done; fi; case \"$comm\" in Hyprland) ver=$(hyprctl version 2>/dev/null | grep -oP 'v[\\d.]+' | head -1);; *) ver=$(echo \"$exe\" | grep -oP '(?<=-)[\\d]+\\.[\\d.]+(?=/bin/)');; esac; case \"$comm\" in cosmic-comp) dv=$(echo \"$exe\" | grep -oP '(?<=-)[\\d]+\\.[\\d.]+(?=/bin/)'); de=\"COSMIC${dv:+ $dv}\";; kwin_wayland|kwin_x11) de=\"KDE Plasma${ver:+ $ver}\";; gnome-shell) de=\"GNOME${ver:+ $ver}\";; umbriel) nc_pid=$(pgrep -u $(id -u) noctalia 2>/dev/null | head -1); nc_ver=$(readlink /proc/$nc_pid/exe 2>/dev/null | grep -oP '(?<=-)[\\d]+\\.[\\d.]+(?=/bin/)'); de=\"Umbriel${ver:+ $ver}\"; wm=\"Noctalia${nc_ver:+ $nc_ver}\";; esac; [ -z \"$wm\" ] && wm=\"${comm}${ver:+ $ver}\"; [ -n \"$(ls /run/user/$(id -u)/wayland-* 2>/dev/null)\" ] && session=\"Wayland\" || session=\"X11\"; out=\"\"; [ -n \"$de\" ] && out=\"${out:+$out · }$de\"; [ -n \"$wm\" ] && out=\"${out:+$out · }$wm\"; [ -n \"$session\" ] && out=\"${out:+$out · }$session\"; echo \"$out\"",
     },
+    // Display (login) manager and version, from display-manager.service's
+    // main process. For greetd, shows the greeter it launches (read from
+    // greetd's --config file) instead of greetd itself.
+    // Built-in alternative: the lm module.
     {
       "type": "command",
       "key": "󰍹 →",
       "keyColor": "#FF6B6B",
       "text": "mainpid=$(systemctl show display-manager.service -p MainPID --value 2>/dev/null); args=$(cat /proc/$mainpid/cmdline 2>/dev/null | tr '\\0' '\\n'); bin=$(echo \"$args\" | head -1); name=$(basename \"$bin\" | sed 's/^\\.//; s/-wrapped$//; s/_wrapper$//'); if [ \"$name\" = \"greetd\" ]; then config=$(echo \"$args\" | awk '/^--config$/{getline; print; exit}'); gb=$(grep -oP '/nix/store/\\S+' \"$config\" 2>/dev/null | grep '/bin/' | grep -v coreutils | tail -1 | sed \"s/'.*//\"); [ -n \"$gb\" ] && bin=\"$gb\" && name=$(basename \"$bin\" | sed 's/^\\.//; s/-wrapped$//; s/-start$//'); fi; ver=$(echo \"$bin\" | grep -oP '(?<=-)[\\d]+\\.[\\d.]+(?=/bin/)'); echo \"${name}${ver:+ $ver}\"",
     },
+    // Cursor theme and size.
+    //   format  {theme}, {size}
     {
       "type": "cursor",
       "key": "󰳽 →",
       "keyColor": "#FF6B6B",
     },
+    // Terminal and shell: $TERM_PROGRAM (or $TERM) · name of $SHELL.
+    // Built-in alternatives: the terminal and shell modules (detect the
+    // parent processes and add versions).
     {
       "type": "command",
       "key": "󰆍 →",
       "keyColor": "#FF6B6B",
       "text": "term=${TERM_PROGRAM:-${TERM}}; shell=$(basename \"$SHELL\"); echo \"${term} · ${shell}\"",
     },
+    // Terminal font: font_family and font_size from ~/.config/kitty/kitty.conf;
+    // prints nothing when that file is missing.
+    // Built-in alternative: the terminalfont module (works for other terminals).
     {
       "type": "command",
       "key": "󰛖 →",
@@ -95,45 +169,63 @@
       "type": "custom",
       "format": "\u001b[38;2;255;225;163mHARDWARE\u001b[0m",
     },
+    // Motherboard vendor, model and BIOS version from /sys/class/dmi/id.
+    // Built-in alternatives: the board and bios modules.
     {
       "type": "command",
       "key": "󰢮 →",
       "keyColor": "#ffe1a3",
       "text": "vendor=$(cat /sys/class/dmi/id/board_vendor 2>/dev/null); board=$(cat /sys/class/dmi/id/board_name 2>/dev/null); bios=$(cat /sys/class/dmi/id/bios_version 2>/dev/null); echo \"${vendor} ${board} · BIOS ${bios}\"",
     },
+    // CPU model, core count and top clock speed.
     {
       "type": "cpu",
       "key": "󰻠 →",
       "keyColor": "#ffe1a3",
     },
+    // GPU model(s).
+    //   detectionMethod  how GPUs are found: auto (graphics APIs), pci (no
+    //                    drivers needed), vulkan (needs Vulkan drivers; slower),
+    //                    opencl, egl-ext, opengl (one GPU only)
+    //   Also available: hideType (integrated | discrete …), driverSpecific.
     {
       "type": "gpu",
       "key": "󰻑 →",
       "keyColor": "#ffe1a3",
       "detectionMethod": "vulkan",
     },
+    // Each monitor's resolution and refresh rate.
     {
       "type": "display",
       "key": "󰍹 →",
       "keyColor": "#ffe1a3",
     },
+    // RAM in use.
+    //   format  {1} used, {2} total, {3} percent used, {4} percent bar
     {
       "type": "memory",
       "key": "󰍛 →",
       "keyColor": "#ffe1a3",
       "format": "RAM {1} / {2} ({3})",
     },
+    // Swap in use; same placeholders as memory, plus {5} swap device name.
     {
       "type": "swap",
       "key": "󰓡 →",
       "keyColor": "#ffe1a3",
       "format": "SWAP {1} / {2} ({3})",
     },
-    // Disks: detected from the hardware, one line per mounted local filesystem.
-    // The name is the filesystem label (mount point when there is none).
-    // Skipped by default: btrfs subvolumes, network shares, hidden volumes.
-    // hideFS autofs: an automount placeholder would list the same drive twice
-    // while it is mounted, so an automounted drive only shows while mounted.
+    // Disks: one line per mounted local filesystem, found automatically.
+    // Shown as "<label> used / total (percent) - <filesystem>"; the label is
+    // the filesystem label (or partition label), the mount point when there
+    // is none: {?name}…{?} prints when name is set, {/name}…{/} when it isn't.
+    // Left out by default: btrfs subvolumes, network shares (CIFS, NFS; sshfs
+    // is shown), hidden and read-only volumes.
+    //   hideFS   filesystem types to hide, colon-separated. autofs hides
+    //            automount placeholders; fastfetch already skips those, so
+    //            this is a safeguard
+    //   Also available: folders (only these mount points), hideFolders,
+    //   showSubvolumes, showExternal, showHidden, showReadOnly.
     {
       "type": "disk",
       "key": "󰋊 →",
@@ -141,22 +233,30 @@
       "hideFS": "autofs",
       "format": "{?name}{name}{?}{/name}{mountpoint}{/} {size-used} / {size-total} ({size-percentage}) - {filesystem}",
     },
+    // Network: "WiFi · <connection> <ip/prefix>", "Ethernet <ip/prefix>" or
+    // "Disconnected". Uses the interface of the default IPv4 route; the WiFi
+    // connection name comes from nmcli (NetworkManager).
+    // Built-in alternatives: the localip and wifi modules.
     {
       "type": "command",
       "key": "󰈀 →",
       "keyColor": "#ffe1a3",
       "text": "iface=$(ip -4 route show default 2>/dev/null | awk '/dev/{print $5; exit}'); ip=$(ip -4 addr show \"$iface\" 2>/dev/null | awk '/inet /{print $2; exit}'); case \"$iface\" in wl*) ssid=$(nmcli -g GENERAL.CONNECTION dev show \"$iface\" 2>/dev/null); [ -n \"$ssid\" ] && label=\"WiFi · ${ssid}\" || label=WiFi;; en*|eth*) label=Ethernet;; *) label=${iface:-Network};; esac; [ -n \"$ip\" ] && echo \"${label} ${ip}\" || echo Disconnected",
     },
+    // Connected Bluetooth devices (and battery level when reported).
+    //   Also available: showDisconnected (list paired but disconnected ones).
     {
       "type": "bluetooth",
       "key": "󰂯 →",
       "keyColor": "#ffe1a3",
     },
+    // Battery charge and status; hidden on machines without a battery.
     {
       "type": "battery",
       "key": "󰁹 →",
       "keyColor": "#ffe1a3",
     },
+    // Charger wattage; hidden when none is reported.
     {
       "type": "poweradapter",
       "key": "󰚥 →",
@@ -165,8 +265,10 @@
     // "break",
 
     // ── WEATHER ───────────────────────────────────────────────────────────────
-    // Disabled: synchronous curl to wttr.in added ~0.33s per shell start.
-    // Uncomment this block (and the "break" above) to bring it back.
+    // Off: the curl to wttr.in runs on every shell start, so fastfetch waits
+    // for the network each time. To turn it on, uncomment this block and the
+    // "break" above. Built-in alternative: the weather module (wttr.in-style
+    // outputFormat, with a timeout option).
     // {
       // "type": "custom",
       // "format": "\u001b[38;2;203;166;247mWEATHER\u001b[0m",
@@ -177,6 +279,9 @@
       // "keyColor": "#cba6f7",
       // "text": "curl -s 'wttr.in/?format=%c+%C+%t+(feels+%f)+%l' 2>/dev/null | sed 's/+\\([0-9]\\)/\\1/g'",
     // },
+    // Row of the terminal's colours, as a palette preview.
+    //   paddingLeft  spaces before the row
+    //   symbol       block, background, circle, diamond, triangle, square or star
     {
       "type": "colors",
       "paddingLeft": 3,

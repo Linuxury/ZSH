@@ -1,15 +1,37 @@
-# ---------------------------------------------------------------------------
-# _nru_fail_summary — turns a failed rebuild log into a short explanation.
+# ===========================================================================
+# conf.d/nru/fail.zsh — explain a failed rebuild and apply the hash fix
 #
-# Sets _NRU_FAIL_KIND (hash | hash-stale | hash-manual | build | config |
-# download | disk | unknown) and, for hash kinds, _NRU_FIX_PKG/_ATTR/_HASH,
-# which _nru_rebuild uses to pick sensible menu options.
-# ---------------------------------------------------------------------------
+# _nixos_run (run.zsh) calls _nru_fail_summary on the saved failure log;
+# _nru_rebuild (rebuild.zsh) reads the kind it sets to choose menu options and
+# calls _nru_hash_fix for [f]ix. Loaded like every conf.d/*/*.zsh file; there
+# is no switch.
+# ===========================================================================
+
+# _nru_fail_summary — print a short explanation of a failed rebuild log and
+# classify it. The first matching check wins:
+#   hash         fixed-output hash mismatch; the package attribute exists and
+#                carries the hash nix expected, so [f]ix can override it
+#   hash-stale   mismatch on a hash pkgs/hash-fixes.nix supplied: nixpkgs has
+#                since fixed it, so our override must go
+#   hash-manual  mismatch [f]ix cannot target (unknown attribute or hash)
+#   disk         "No space left on device"; shows free space on /nix
+#   download     DNS, timeout or connection errors while fetching
+#   build        a builder failed; shows its last 5 log lines + "nix log" path
+#   config       evaluation error; shows the message and file:line in the repo
+#   unknown      anything else; shows up to 5 error lines
+#   Arguments  $1  path to the rebuild log
+#   Sets       _NRU_FAIL_KIND, and for hash kinds _NRU_FIX_PKG (package name),
+#              _NRU_FIX_ATTR (pnpmDeps | npmDeps | cargoDeps | goModules),
+#              _NRU_FIX_HASH (the hash nix got)
+#   Example    _nru_fail_summary "$_NRU_CACHE/last-failure.log"
 _nru_fail_summary() {
   local log=$1 drv spec got dep pkg="" attr="" msg loc nixlog
   _NRU_FAIL_KIND=unknown; _NRU_FIX_PKG=""; _NRU_FIX_ATTR=""; _NRU_FIX_HASH=""
   echo ""
 
+  # Hash mismatch: drv = derivation name, spec/got = expected/actual hash,
+  # dep = how many dependent builds failed with it. The drv suffix names the
+  # fetcher attribute; the package name drops that suffix and the version.
   if grep -q 'hash mismatch in fixed-output derivation' "$log"; then
     drv=$(grep -m1 -oP "fixed-output derivation '/nix/store/[a-z0-9]{32}-\K[^']+(?=\.drv')" "$log")
     spec=$(grep -m1 -oP 'specified:\s+\Ksha256-\S+' "$log")
@@ -77,10 +99,15 @@ _nru_fail_summary() {
   printf "  full output: %s\n" "${log/#$HOME/~}"
 }
 
-# ---------------------------------------------------------------------------
-# _nru_hash_fix — adds (kind hash) or removes (kind hash-stale) the entry for
-# _NRU_FIX_PKG in pkgs/hash-fixes.nix. One entry per line, file ends "}".
-# ---------------------------------------------------------------------------
+# _nru_hash_fix — edit nixos-config pkgs/hash-fixes.nix (read by the
+# hash-fixes overlay in flake.nix) for the package _nru_fail_summary found.
+#   kind hash        replace any entry for _NRU_FIX_PKG with
+#                    <pkg> = { attr = "<attr>"; hash = "<sri>"; added = "<date>"; };
+#                    inserted before the closing "}"
+#   kind hash-stale  delete the entry for _NRU_FIX_PKG
+#   Arguments  none; uses _NRU_FAIL_KIND and _NRU_FIX_PKG/_ATTR/_HASH
+#   Needs      one entry per line and "}" as the last line (sed edits by line)
+#   Example    _nru_hash_fix
 _nru_hash_fix() {
   local f="$NIXOS_CONFIG/pkgs/hash-fixes.nix"
   sed -i "/^  ${_NRU_FIX_PKG} = /d" "$f"

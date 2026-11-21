@@ -1,14 +1,30 @@
-# ---------------------------------------------------------------------------
-# _nru_update_claude_desktop — bumps pkgs/claude-desktop/package.nix to the
-# newest build in Anthropic's apt index. Version and SHA256 come from the same
-# Packages file (nothing is downloaded) and are always written together.
-# Only the lock writer bumps; other hosts report and pull it.
-# ---------------------------------------------------------------------------
+# ===========================================================================
+# conf.d/nru/updaters.zsh — nru steps that bump single pinned packages
+#
+# Each step checks one pin in nixos-config and prints one status row
+# (current / bumped / available / warning); all return 0. The rebuild step
+# commits changed pins on the lock writer. Which hosts run which step is set in
+# conf.d/nru/nru.zsh: Claude desktop where it is installed (or on the lock
+# writer), the rest on the lock writer only. Skipped when _NRU_OFFLINE is set.
+# Loaded like every conf.d/*/*.zsh file; there is no switch.
+# ===========================================================================
+
+# _nru_claude_latest — "<version> <sha256 hex>" of the newest amd64 build in
+# Anthropic's apt Packages index (nothing is downloaded; 15s timeout).
+#   Example  read -r ver sha < <(_nru_claude_latest)
 _nru_claude_latest() {   # "<version> <sha256 hex>" of the newest amd64 build
   curl -fsSL --max-time 15 https://downloads.claude.ai/claude-desktop/apt/stable/dists/stable/main/binary-amd64/Packages \
     | awk '/^Version:/ { v = $2 } /^SHA256:/ { print v, $2 }' | sort -V | tail -1
 }
-# Bump the VSCodium Open VSX extensions (lock writer only; scripts/vscodium-ext-bump does the work).
+# The next four steps run a script in nixos-config/scripts that rewrites its pin
+# file; the step only shows the result. On script failure: warning row plus the
+# script's last 2 log lines, pin kept.
+#   Arguments  none
+#   Example    _nru_update_zennotes
+
+# _nru_update_vscodium_ext — Open VSX extensions in
+# modules/development/editors/vscodium/extensions.json (scripts/vscodium-ext-bump;
+# entries with a "hold" reason are skipped).
 _nru_update_vscodium_ext() {
   local name="VSCodium ext" icon=$_NRU_NIX log="$_NRU_CACHE/vscodium-ext.log"
   if [[ -n $_NRU_OFFLINE ]]; then _nru_offline "$icon" "$name"; return 0; fi
@@ -19,7 +35,9 @@ _nru_update_vscodium_ext() {
   if [[ $res == "all current" ]]; then _nru_quiet "$icon" "$name" "$res"; else _nru_ok "$icon" "$name" "$res"; fi
 }
 
-# Bump the pinned ZenNotes image tag (lock writer only; scripts/zennotes-bump does the work).
+# _nru_update_zennotes — ZenNotes image tag in
+# modules/services/zennotes/zennotes.json, newest x.y.z on Docker Hub
+# (scripts/zennotes-bump).
 _nru_update_zennotes() {
   local pin="$NIXOS_CONFIG/modules/services/zennotes/zennotes.json" name="ZenNotes" icon=$_NRU_NIX
   local log="$_NRU_CACHE/zennotes.log" cur new
@@ -32,7 +50,9 @@ _nru_update_zennotes() {
   if [[ $new == $cur ]]; then _nru_quiet "$icon" "$name" "$cur current"; else _nru_ok "$icon" "$name" "$cur → $new"; fi
 }
 
-# Bump the pinned MailCraft release (lock writer only; scripts/mailcraft-bump does the work).
+# _nru_update_mailcraft — MailCraft release in pkgs/mailcraft/mailcraft.json,
+# newest on GitHub, hash from the release SHA256SUMS.txt
+# (scripts/mailcraft-bump).
 _nru_update_mailcraft() {
   local pin="$NIXOS_CONFIG/pkgs/mailcraft/mailcraft.json" name="MailCraft" icon=$_NRU_NIX
   local log="$_NRU_CACHE/mailcraft.log" cur new
@@ -45,7 +65,10 @@ _nru_update_mailcraft() {
   if [[ $new == $cur ]]; then _nru_quiet "$icon" "$name" "$cur current"; else _nru_ok "$icon" "$name" "$cur → $new"; fi
 }
 
-# Bump Media-Server's pinned Plex (lock writer only; scripts/plex-bump does the work).
+# _nru_update_plex — Media-Server's Plex in hosts/Media-Server/plex.json
+# (scripts/plex-bump, called with no argument = Plex Pass beta channel;
+# alternative: "public" for the public release). Shown without the build
+# suffix after the last "-".
 _nru_update_plex() {
   local pin="$NIXOS_CONFIG/hosts/Media-Server/plex.json" name="Plex" icon=$_NRU_NIX
   local log="$_NRU_CACHE/plex.log" cur new
@@ -58,6 +81,12 @@ _nru_update_plex() {
   if [[ $new == $cur ]]; then _nru_quiet "$icon" "$name" "${cur%-*} current"; else _nru_ok "$icon" "$name" "${cur%-*} → ${new%-*}"; fi
 }
 
+# _nru_update_claude_desktop — bump pkgs/claude-desktop/package.nix to the
+# newest build from _nru_claude_latest. Never downgrades. Version and SRI hash
+# are written together; only the lock writer writes them, other hosts show
+# "available" and get the bump on their next pull.
+#   Arguments  none
+#   Example    _nru_update_claude_desktop
 _nru_update_claude_desktop() {
   local pkg="$NIXOS_CONFIG/pkgs/claude-desktop/package.nix" name="Claude" icon=$_NRU_FP
   local log="$_NRU_CACHE/claude.log" cur new h sri

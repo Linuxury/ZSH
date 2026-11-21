@@ -1,3 +1,22 @@
+# ===========================================================================
+# starship/starship.toml — Starship prompt layout with a fixed Nord palette
+#
+# The starting ~/.config/starship.toml. For linuxury and alex, Home Manager
+# copies it in once (home.activation.starshipSeed); where the wallpaper
+# colour sync runs (modules/services/wallpaper-slideshow.nix), matugen then
+# replaces it after every wallpaper change with starship-colors.toml.template
+# filled with the wallpaper's colours: same layout, palette 'colors' instead
+# of 'nord'. For babylinux it is linked in as is (home.file).
+# Make layout changes in both files.
+# Option reference: https://starship.rs/config/ (or `starship print-config
+# --default <module>` for every option and its default).
+# ===========================================================================
+
+# Prompt line, left to right. Each $name is a module; the trailing \ joins
+# lines so it stays one line. Line 1: directory, git branch/status, then
+# $fill pushes python, rust, jobs and command duration to the right edge.
+# Line 2: the ❯ prompt character ($character).
+# Other modules can be added the same way, e.g. $nix_shell, $nodejs, $time.
 format = """
 $directory\
 $git_branch\
@@ -10,9 +29,20 @@ $cmd_duration\
 $line_break\
 $character"""
 
+#   add_newline  blank line between prompts (false packs them together)
+#   palette      which [palettes.<name>] table below supplies the colour
+#                names used in style strings
 add_newline = true
 palette = 'nord'
 
+# Current directory.
+#   style              colour/weight of the path
+#   format             $path then a space; default also shows a read-only lock
+#   truncation_length  show at most this many trailing folders (0 = whole path)
+#   truncation_symbol  printed in front of a shortened path (default: nothing)
+#   truncate_to_repo   true = shorten to the git repo root; false = always
+#                      count truncation_length folders
+#   Also available: home_symbol (default ~), read_only, fish_style_pwd_dir_length.
 [directory]
 style = 'bold fg:dark_blue'
 format = '[$path ]($style)'
@@ -20,24 +50,43 @@ truncation_length = 3
 truncation_symbol = '…/'
 truncate_to_repo = false
 
+# Replace a folder name in the path with an icon (Nerd Font glyphs).
+# Add any 'Name' = 'text' pair; the match is on the path text.
 [directory.substitutions]
 'Documents' = '󰈙'
 'Downloads' = ' '
 'Music' = ' '
 'Pictures' = ' '
 
+# Git branch, shown only inside a repo: "on  main".
+#   style / symbol  colour and icon before the branch name
+#   format          "on" in white, then symbol + branch in style
+#   Also available: truncation_length, only_attached, ignore_branches.
 [git_branch]
 style = 'fg:green'
 symbol = ' '
 format = '[on](white) [$symbol$branch ]($style)'
 
+# Git working-tree state after the branch. $all_status is every flag
+# (default symbols: ! modified, + staged, ? untracked, ✘ deleted, » renamed,
+# $ stashed, = conflicted); $ahead_behind is ⇡ ahead / ⇣ behind / ⇕ diverged.
+# The outer ( ) hides the whole group when the tree is clean. The default
+# format wraps the flags in [ ]; this one drops the brackets.
 [git_status]
 style = 'fg:green'
 format = '([$all_status$ahead_behind]($style) )'
 
+# Fills the gap between the left and right parts of line 1.
+#   symbol  repeated character; a space keeps it invisible (default ".")
 [fill]
 symbol = ' '
 
+# Python version, shown in folders with .py files, pyproject.toml,
+# requirements.txt, .python-version and similar, or with a virtualenv active.
+#   format              symbol, version, then "(venv name)" when one is active
+#   pyenv_version_name  true = show pyenv's version name instead of
+#                       `python --version`
+#   pyenv_prefix        text before the pyenv name (default "pyenv ")
 [python]
 style = 'teal'
 symbol = ' '
@@ -45,21 +94,34 @@ format = '[${symbol}${pyenv_prefix}(${version} )(\($virtualenv\) )]($style)'
 pyenv_version_name = true
 pyenv_prefix = ''
 
+# Rust toolchain version, shown in folders with Cargo.toml or .rs files.
 [rust]
 style = 'orange'
 symbol = ' '
 
+# Background jobs in this shell (e.g. after ctrl+z or `cmd &`).
+#   number_threshold  show the count from this many jobs; the format below
+#                     has no $number, so only the icon appears
+#   format            icon only; add $number to show the count too
+#   Also available: threshold (jobs before anything shows, default 1).
 [jobs]
 symbol = ' '
 style = 'red'
 number_threshold = 1
 format = '[$symbol]($style)'
 
+# How long the last command ran.
+#   min_time  only shown when it took at least this many ms (default 2000)
+#   Also available: show_milliseconds, show_notifications + min_time_to_notify
+#   (desktop notification when a long command finishes).
 [cmd_duration]
 min_time = 500
 style = 'fg:gray'
 format = '[$duration]($style)'
 
+# Colour names used in the style strings above (Nord theme hex values).
+# Selected by `palette = 'nord'`; add another [palettes.<name>] table and
+# point palette at it to switch themes.
 [palettes.nord]
 dark_blue = '#5E81AC'
 blue      = '#81A1C1'
@@ -72,11 +134,3 @@ purple    = '#B48EAD'
 gray      = '#434C5E'
 black     = '#2E3440'
 white     = '#D8DEE9'
-
-# This file is only a bootstrap seed (home.activation.starshipSeed in
-# modules/users/linuxury/home/default.nix copies it to ~/.config/starship.toml once, on
-# first run before any wallpaper has ever been processed). From the first
-# wallpaper-color-sync onward, matugen's own [templates.starship] post_hook
-# overwrites ~/.config/starship.toml entirely with its own generated
-# format/palette — same mechanism on every compositor/DE, no Noctalia
-# dependency. See modules/services/wallpaper-slideshow/default.nix.
