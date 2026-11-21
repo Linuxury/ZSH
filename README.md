@@ -10,7 +10,7 @@ and the `nru` update tool only makes sense there. The rest is plain zsh.
 | `zshrc` | Entry point. Sources `conf.d/<folder>/*.zsh`. |
 | `init.nix` | The same files joined into one string, for Nix builds. |
 | `conf.d/core/` | `00-env.zsh` (PATH wrappers, `EDITOR`, `NIXOS_CONFIG`, API key variables), `banner.zsh` (fastfetch on startup, random image from `~/Pictures/Fastfetch`), `completion.zsh` |
-| `conf.d/herdr/` | `team.zsh`: the `herdr-team` command (`save` records each running Claude team member's session id; `app` rebuilds the lead + 2x2 workers layout in herdr-app and resumes those sessions). Needs claude, jq, herdr-app and hc. |
+| `conf.d/herdr/` | `team.zsh`: the `herdr-team` command. `app` builds the lead + 2x2 workers team in herdr-app, or after a reboot resumes each member's Claude session in its pane (found by its `-n` name); `launch` opens herdr-app first (the "Herdr Team" launcher runs it). Needs claude, jq, herdr-app and hc. |
 | `conf.d/nru/` | `nru`, the NixOS update tool, in 13 files (`00-ui.zsh` holds the shared state) |
 | `conf.d/shortcuts/` | `shortcuts.zsh` (short commands, listed below), `hytale.zsh`, `opencode.zsh`, `ctrl-check.zsh` |
 | `conf.d/user/` | `local.zsh` loads `~/.env.local` if it exists (keys and secrets, not tracked) |
