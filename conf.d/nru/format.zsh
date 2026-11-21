@@ -101,7 +101,7 @@ _fmt_nvd() {
       # "#NN" counter, splits at " -> " into old_v and new_v, and skips any
       # line without an arrow.
       version)
-        pkg=$(printf '%s' "$line" | sed -E 's/^\[[A-Z][.*]\]  //')
+        pkg=$(printf '%s' "$line" | sed -E 's/^\[[A-Z][.*+-]\]  //')
         [[ -z "$pkg" ]] && continue
         pkg=$(printf '%s' "$pkg" | sed -E 's/^#[0-9]+  +//')
         [[ -z "$pkg" ]] && continue

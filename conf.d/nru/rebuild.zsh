@@ -6,6 +6,19 @@
 # by zshrc; there is no switch. To drop it, nru must stop calling it first.
 # ===========================================================================
 
+# Files nru updates in nixos-config: [p]revious lock checks and restores them,
+# and the lock writer commits and pushes them. One list, so all three agree.
+typeset -ga _NRU_PINNED=(
+  flake.lock
+  modules/gaming/gaming.nix
+  pkgs/hash-fixes.nix
+  pkgs/craft-apps/package.nix
+  pkgs/claude-desktop/package.nix
+  hosts/Media-Server/plex.json
+  modules/services/zennotes/zennotes.json
+  modules/development/editors/vscodium/extensions.json
+)
+
 # _nru_rebuild — switch this host to the flake in $NIXOS_CONFIG, then report.
 # A separate function so a retry repeats only the rebuild, not nru's git pull
 # and input updates.
@@ -55,7 +68,7 @@ _nru_rebuild() {
     #   g  garbage-collect generations older than 30 days, then retry
     #   q  quit (returns 1)
     moved=""
-    git -C "$cfg" diff --quiet HEAD -- flake.lock modules/gaming/gaming.nix pkgs/craft-apps/package.nix pkgs/claude-desktop/package.nix hosts/Media-Server/plex.json modules/services/zennotes/zennotes.json modules/development/editors/vscodium/extensions.json 2>/dev/null || moved=p
+    git -C "$cfg" diff --quiet HEAD -- "${_NRU_PINNED[@]}" 2>/dev/null || moved=p
     case $_NRU_FAIL_KIND in
       hash)        keys=(f $moved l q) ;;
       hash-stale)  keys=(f l q) ;;
@@ -90,7 +103,7 @@ _nru_rebuild() {
 
     case $choice in
       f) _nru_hash_fix ;;
-      p) git -C "$cfg" restore flake.lock modules/gaming/gaming.nix pkgs/craft-apps/package.nix pkgs/claude-desktop/package.nix hosts/Media-Server/plex.json modules/services/zennotes/zennotes.json modules/development/editors/vscodium/extensions.json 2>/dev/null
+      p) git -C "$cfg" restore "${_NRU_PINNED[@]}" 2>/dev/null
          _NRU_ON_PREV=1
          printf "  ↺  restored flake.lock (nixpkgs %s) · rebuilding…\n\n" \
            "$(date -d @"$(jq -r '.nodes[.nodes.root.inputs.nixpkgs].locked.lastModified' "$cfg/flake.lock")" +%F)" ;;
@@ -143,7 +156,7 @@ _nru_rebuild() {
   if _nru_is_lock_writer; then
     local git_out f
     local -a changed names
-    changed=(${(f)"$(git -C "$cfg" status --porcelain -- flake.lock modules/gaming/gaming.nix pkgs/hash-fixes.nix pkgs/craft-apps/package.nix pkgs/claude-desktop/package.nix hosts/Media-Server/plex.json modules/services/zennotes/zennotes.json modules/development/editors/vscodium/extensions.json | cut -c4-)"})
+    changed=(${(f)"$(git -C "$cfg" status --porcelain -- "${_NRU_PINNED[@]}" | cut -c4-)"})
     if (( $#changed )); then
       for f in $changed; do
         case $f in modules/gaming/gaming.nix) names+=("gaming module") ;; pkgs/craft-apps/package.nix) names+=("craft apps") ;; pkgs/claude-desktop/package.nix) names+=("claude desktop") ;; hosts/Media-Server/plex.json) names+=("plex") ;; modules/services/zennotes/zennotes.json) names+=("zennotes") ;; modules/development/editors/vscodium/extensions.json) names+=("vscodium ext") ;; *) names+=("${f:t}") ;; esac

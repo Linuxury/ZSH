@@ -110,7 +110,9 @@ _nru_fail_summary() {
 #   Example    _nru_hash_fix
 _nru_hash_fix() {
   local f="$NIXOS_CONFIG/pkgs/hash-fixes.nix"
-  sed -i "/^  ${_NRU_FIX_PKG} = /d" "$f"
+  # Drop any existing entry; awk index() matches the name literally (a regex
+  # would let "." or "+" in a package name match other entries).
+  awk -v p="  ${_NRU_FIX_PKG} = " 'index($0, p) != 1' "$f" > "$f.tmp" && mv "$f.tmp" "$f"
   if [[ $_NRU_FAIL_KIND == hash ]]; then
     sed -i "\$i\\  ${_NRU_FIX_PKG} = { attr = \"${_NRU_FIX_ATTR}\"; hash = \"${_NRU_FIX_HASH}\"; added = \"$(date +%F)\"; };" "$f"
     printf "  ✎  added %s → pkgs/hash-fixes.nix · rebuilding…\n\n" "$_NRU_FIX_PKG"

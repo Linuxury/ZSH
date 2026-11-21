@@ -13,10 +13,10 @@
 hytale() {
   local SCC="scc"
   local PREV_PROFILE
-  # scc info prints "Profile: <name>" for the running driver. The awk takes
-  # the second whitespace-separated field, so a name with spaces is cut at its
-  # first space. scc errors are hidden; an empty result falls back to "Desktop".
-  PREV_PROFILE=$($SCC info 2>/dev/null | grep -i 'profile:' | awk '{print $2}')
+  # scc info prints "Profile: <name>" for the running driver; keep everything
+  # after "Profile:" so names with spaces stay whole. scc errors are hidden;
+  # an empty result falls back to "Desktop".
+  PREV_PROFILE=$($SCC info 2>/dev/null | sed -n 's/^.*[Pp]rofile:[[:space:]]*//p' | head -n 1)
   [[ -z "$PREV_PROFILE" ]] && PREV_PROFILE="Desktop"
 
   # scc set-profile [controller_id] "profile name". Quote names with spaces.
