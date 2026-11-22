@@ -102,6 +102,7 @@ _nru_craft_unpackaged() {
   new=($(curl -fsSL --max-time 15 "https://api.github.com/orgs/storytold/repos?per_page=100" 2>/dev/null \
     | jq -r '.[] | select(.archived | not) | .name | select(test("^[a-z]+craft$"))' 2>/dev/null))
   new=(${new:|have})
+  new=(${new:#autocraft})   # server pipeline, not a desktop app
   (( $#new )) || return 0
   _nru_row "$_NRU_GH" "Craft (new)" "🆕 ${(j:, :)new} · not packaged — add to pkgs/craft-apps/package.nix"
 }
