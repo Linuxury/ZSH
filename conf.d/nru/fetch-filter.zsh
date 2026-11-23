@@ -134,7 +134,10 @@ _nix_fetch_filter() {
   # -L build-log lines ("noctalia> [312/840] Compiling …"): never shown, but
   # they name the package that is ACTUALLY busy — "building" lines only say
   # what started last, and nix never prints when a build finishes.
-  bt && /^[A-Za-z0-9][A-Za-z0-9._+-]*> / {
+  # Also dropped before any build is announced: import-from-derivation builds
+  # during evaluation print -L lines with no "will be built" line first.
+  /^[A-Za-z0-9][A-Za-z0-9._+-]*> / {
+    if (!bt) next
     pkg = substr($0, 1, index($0, ">") - 1); step = ""
     if (match($0, /\[[0-9]+\/[0-9]+\]/)) step = " " substr($0, RSTART, RLENGTH)
     if (pkg step != label) { label = substr(pkg, 1, 30 - length(step)) step; kind = "build"; state() }
