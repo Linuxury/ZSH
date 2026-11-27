@@ -16,10 +16,13 @@ path=(/run/wrappers/bin $path)
 # Default editor.
 #   EDITOR  used by terminal tools (git commit, crontab -e, sudoedit)
 #   VISUAL  used by tools that can open a full-screen editor; checked first
-#   Alternatives: hx (Helix), micro, nano, or a GUI editor with a wait flag
-#   such as "zeditor --wait" or "codium --wait".
-export EDITOR=nvim
-export VISUAL=nvim
+# NixOS sets both (nixos-config: core.nix EDITOR=hx, vscode.nix
+# VISUAL="code --wait"), so only fill them in when unset: hx, and VISUAL
+# falls back to EDITOR (headless hosts have no VS Code).
+#   Alternatives: micro, nano, or a GUI editor with a wait flag such as
+#   "code --wait".
+export EDITOR="${EDITOR:-hx}"
+export VISUAL="${VISUAL:-$EDITOR}"
 
 # Path to the NixOS flake repo. Read by nru (update + rebuild) and its
 # helpers; change it if the repo lives somewhere else.
