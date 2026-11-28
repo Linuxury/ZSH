@@ -102,7 +102,10 @@ _nru_craft_unpackaged() {
   new=($(curl -fsSL --max-time 15 "https://api.github.com/orgs/storytold/repos?per_page=100" 2>/dev/null \
     | jq -r '.[] | select(.archived | not) | .name | select(test("^[a-z]+craft$"))' 2>/dev/null))
   new=(${new:|have})
-  new=(${new:#autocraft})   # server pipeline, not a desktop app
+  (( $#new )) || return 0
+  # Only repos with a v* release tag: nothing to fetch otherwise, and it
+  # drops server-only repos (autocraft, tokencraft). Tags via git, no API quota.
+  new=(${(f)"$(_nru_craft_latest $new | awk 'NF == 2 { print $1 }')"})
   (( $#new )) || return 0
   _nru_row "$_NRU_GH" "Craft (new)" "🆕 ${(j:, :)new} · not packaged — add to pkgs/craft-apps/package.nix"
 }
