@@ -200,15 +200,20 @@
       "key": "󰍹 →",
       "keyColor": "#ffe1a3",
     },
-    // RAM in use.
-    //   format  {1} used, {2} total, {3} percent used, {4} percent bar
+    // RAM in use, plus the speed it is clocked at right now. The "memory"
+    // module has no speed field, so this is a command. The speed is the
+    // configured speed (not the rated max) from udev's copy of the DMI table,
+    // which any user can read; the raw table is root-only. Without DMI data
+    // (some VMs) the "@ … MT/s" part is left off.
     {
-      "type": "memory",
+      "type": "command",
       "key": "󰍛 →",
       "keyColor": "#ffe1a3",
-      "format": "RAM {1} / {2} ({3})",
+      "text": "s=$(udevadm info -q property /sys/class/dmi/id | sed -n 's/^MEMORY_DEVICE_0_CONFIGURED_SPEED_MTS=//p'); awk -v s=\"$s\" '/^MemTotal/{t=$2}/^MemAvailable/{a=$2}END{u=t-a; printf \"RAM %.2f GiB / %.2f GiB (%d%%)%s\", u/1048576, t/1048576, u*100/t, (s ? \" @ \" s \" MT/s\" : \"\")}' /proc/meminfo",
     },
-    // Swap in use; same placeholders as memory, plus {5} swap device name.
+    // Swap in use.
+    //   format  {1} used, {2} total, {3} percent used, {4} percent bar,
+    //           {5} swap device name
     {
       "type": "swap",
       "key": "󰓡 →",
